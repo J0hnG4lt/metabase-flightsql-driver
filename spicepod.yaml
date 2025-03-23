@@ -1,0 +1,8 @@
+version: v1
+kind: Spicepod
+name: file_recipe
+datasets:
+  - name: yellow_taxis
+    from: file://data/yellow_tripdata_2024-01.parquet
+    params:
+      file_format: parquet

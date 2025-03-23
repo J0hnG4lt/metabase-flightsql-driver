@@ -1,0 +1,4 @@
+{:paths ["src" "resources"]
+
+ :deps {org.apache.arrow/flight-sql-jdbc-driver {:mvn/version "18.2.0"}}
+ }
