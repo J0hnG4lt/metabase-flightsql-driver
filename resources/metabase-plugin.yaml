@@ -40,4 +40,4 @@ init:
   - step: load-namespace
     namespace:  metabase.driver.flightsql
   - step: register-jdbc-driver
-    class: org.apache.arrow.flight.jdbc.FlightSqlDriver
+    class: org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
