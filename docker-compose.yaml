@@ -6,7 +6,7 @@ services:
     volumes:
       - /dev/urandom:/dev/random:ro
       - type: bind
-        source: C:\Users\DEEPGAMING\workspace\repos\metabase-driver\target\metabase-driver-0.1.0-SNAPSHOT-standalone.jar
+        source: C:\Users\DEEPGAMING\workspace\repos\metabase-flightsql-driver\target\metabase-driver-0.1.0-SNAPSHOT-standalone.jar
         target: /plugins/flightsql-metabase-driver.jar
     ports:
       - 3000:3000
@@ -42,7 +42,7 @@ services:
     user: root
     volumes:
       - type: bind
-        source: C:\Users\DEEPGAMING\workspace\repos\metabase-driver\spicepod.yaml
+        source: C:\Users\DEEPGAMING\workspace\repos\metabase-flightsql-driver\spicepod.yaml
         target: /app/spicepod.yaml
       - type: bind
         source: C:\Users\DEEPGAMING\workspace\repos\metabase-driver\data
