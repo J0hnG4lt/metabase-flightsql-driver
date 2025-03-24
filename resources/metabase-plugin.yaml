@@ -17,12 +17,14 @@ driver:
       display-name: Port
       placeholder: "443"
       required: true
-    - user
+    - name: user
+      required: false
+      display-name: User
     - merge:
         - password
       type: secret
       display-name: Password
-      required: true
+      required: false
     - name: token
       display-name: Token (optional)
       type: secret

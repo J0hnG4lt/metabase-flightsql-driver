@@ -41,28 +41,45 @@
     [_driver _feature _db]
     supported?))
 
-;; Build the connection spec from the provided details.
+(defn non-blank [s default]
+  (if (and (string? s) (not (str/blank? s)))
+    s
+    default))
+
 (defmethod sql-jdbc.conn/connection-details->spec :arrow-flight-sql
   [_ details]
-  (let [host         (or (:host details) "localhost")
-        port         (or (:port details) 443)
-        ;; Build query parameters from available authentication options.
-        query-params (->> {:user          (:user details)
-                           :password      (:password details)
-                           :token         (:token details)
-                           :useEncryption (if (contains? details :useEncryption)
-                                            (:useEncryption details)
-                                            true)}
-                          (filter (comp some? second))
-                          (map (fn [[k v]]
-                                 (str (name k) "=" (codec/url-encode (str v)))))  ;; Use codec/url-encode here
-                          (str/join "&"))
-        conn-uri     (str "jdbc:arrow-flight-sql://" host ":" port
-                          (when (not (str/blank? query-params))
-                            (str "/?" query-params)))]
-    {:classname   "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver"  ;; Adjust if the driver classname changes.
-     :subprotocol "arrow-flight-sql"
-     :subname     conn-uri}))
+  (-> (merge
+       ;; Set default connection parameters for Flight SQL.
+       {:classname   "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver"
+        :subprotocol "arrow-flight-sql"
+        :subname     (let [host (if (and (string? (:host details))
+                                         (not (str/blank? (:host details))))
+                                  (:host details)
+                                  "localhost")
+                           port (if (or (nil? (:port details))
+                                        (and (string? (:port details))
+                                             (str/blank? (:port details))))
+                                  443
+                                  (:port details))
+                           query-params (->> {:user          (:user details)
+                                              :password      (:password details)
+                                              :token         (:token details)
+                                              :useEncryption (if (contains? details :useEncryption)
+                                                               (:useEncryption details)
+                                                               true)}
+                                             (filter (comp some? second))
+                                             (map (fn [[k v]]
+                                                    (str (name k) "=" (codec/url-encode (str v)))))
+                                             (str/join "&"))]
+                       (str "//" host ":" port
+                            (when (not (str/blank? query-params))
+                              (str "/?" query-params))))}
+       ;; Remove keys that we don’t want passed along as connection properties.
+       (dissoc details :host :port))
+      ;; Let Metabase process any additional options.
+      (sql-jdbc.common/handle-additional-options details)))
+
+
 
 ;; Example implementation for testing the connection.
 (defmethod driver/can-connect? :arrow-flight-sql
