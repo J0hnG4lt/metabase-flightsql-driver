@@ -23,7 +23,11 @@
    [metabase.driver.sql-jdbc :as sql-jdbc]
    [metabase.driver.sql-jdbc.common :as sql-jdbc.common]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
-   [metabase.util.log :as log]))
+   [metabase.util.log :as log]
+   [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
+   [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
+   )
+  )
 
 ;; Register this driver as a JDBC-based driver with parent :sql-jdbc.
 (driver/register! :arrow-flight-sql, :parent #{:sql-jdbc})
@@ -49,7 +53,7 @@
 (defmethod sql-jdbc.conn/connection-details->spec :arrow-flight-sql
   [_ details]
   (-> (merge
-       ;; Set default connection parameters for Flight SQL.
+        ;; Default connection parameters for Flight SQL
        {:classname   "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver"
         :subprotocol "arrow-flight-sql"
         :subname     (let [host (if (and (string? (:host details))
@@ -73,11 +77,20 @@
                                              (str/join "&"))]
                        (str "//" host ":" port
                             (when (not (str/blank? query-params))
-                              (str "/?" query-params))))}
-       ;; Remove keys that we don’t want passed along as connection properties.
+                              (str "/?" query-params))))
+         ;; Add casting logic to prevent Timestamp → LocalDateTime class cast errors
+        :cast        (fn [col val]
+                       (cond
+                         (and (= (:base-type col) :type/DateTime)
+                              (instance? java.sql.Timestamp val))
+                         (.toLocalDateTime ^java.sql.Timestamp val)
+
+                         :else val))}
+        ;; Clean up any internal config keys
        (dissoc details :host :port))
-      ;; Let Metabase process any additional options.
+      ;; Process other options
       (sql-jdbc.common/handle-additional-options details)))
+
 
 
 
@@ -93,3 +106,59 @@
       false)))
 
 ;; Additional methods (describe-database, describe-table, etc.) can remain unchanged.
+
+
+(defmethod sql-jdbc.sync/database-type->base-type :arrow-flight-sql
+  [_driver base-type]
+  (let [normalized (-> base-type
+                       str
+                       str/upper-case
+                       keyword)]
+    (case normalized
+      ;; Boolean
+      :BOOLEAN            :type/Boolean
+
+      ;; Integers
+      :INT8              :type/Integer
+      :INT16             :type/Integer
+      :INT32             :type/Integer
+      :INT64             :type/BigInteger
+      :UINT8             :type/Integer
+      :UINT16            :type/Integer
+      :UINT32            :type/BigInteger
+      :UINT64            :type/BigInteger
+
+      ;; Floating point
+      :FLOAT16           :type/Float
+      :FLOAT32           :type/Float
+      :FLOAT64           :type/Float
+
+      ;; Decimal
+      :DECIMAL128        :type/Decimal
+      :DECIMAL256        :type/Decimal
+
+      ;; Time and date
+      :DATE32            :type/Date
+      :TIME32            :type/Time
+      :TIME64            :type/Time
+      :TIMESTAMP         :type/DateTime
+      :TIMESTAMP_MILLISECOND :type/DateTime
+      :TIMESTAMP_MICROSECOND :type/DateTime
+      :TIMESTAMP_NANOSECOND  :type/DateTime
+
+      ;; Strings and binary
+      :UTF8              :type/Text
+      :BINARY            :type/*
+      :FIXED_SIZE_BINARY :type/*
+      :INTERVAL          :type/*
+
+      ;; Fallback
+      :type/*)))
+
+
+
+(defmethod sql-jdbc.execute/read-column-thunk [:arrow-flight-sql java.sql.Types/TIMESTAMP]
+  [_driver ^java.sql.ResultSet rs _rsmeta ^Integer i]
+  (fn []
+    (some-> (.getTimestamp rs i)
+            .toLocalDateTime)))

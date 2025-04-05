@@ -28,6 +28,8 @@ services:
     image: postgres:latest
     container_name: postgres
     hostname: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: metabase
       POSTGRES_DB: metabaseappdb
@@ -60,3 +62,6 @@ services:
 networks:
   metanet1:
     driver: bridge
+
+volumes:
+  pgdata:
