@@ -162,3 +162,18 @@
   (fn []
     (some-> (.getTimestamp rs i)
             .toLocalDateTime)))
+
+(defmethod driver/describe-database :arrow-flight-sql
+  [driver database]
+  (sql-jdbc.execute/do-with-connection-with-options
+   driver
+   database
+   nil  ;; connection options (not needed for now)
+   (fn [^java.sql.Connection conn]
+     (let [rows (jdbc/query {:connection conn} ["SHOW TABLES"])
+           user-tables (filter #(= "BASE TABLE" (:table_type %)) rows)
+           formatted (map (fn [row]
+                            {:name   (:table_name row)
+                             :schema (:table_schema row)})
+                          user-tables)]
+       {:tables (into #{} formatted)}))))
