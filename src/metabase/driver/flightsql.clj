@@ -138,12 +138,13 @@
       (let [rows (jdbc/query {:connection conn}
                              ["SHOW TABLES"]
                              {:identifiers str/lower-case})
-            ;; You can adjust filtering here if needed.
-            formatted (map (fn [row]
-                             {:name   (:table_name row)
-                              :schema (:table_schema row)})
-                           rows)]
+            formatted (->> rows
+                           (filter #(not= (str/lower-case (:table_schema %)) "information_schema"))
+                           (map (fn [row]
+                                  {:name   (:table_name row)
+                                   :schema (:table_schema row)})))]
         {:tables (into #{} formatted)}))))
+
 
 (defmethod driver/describe-table :arrow-flight-sql
   [_ driver database {:keys [name schema]}]
