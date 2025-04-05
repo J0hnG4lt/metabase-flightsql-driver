@@ -2,41 +2,30 @@
   "Arrow Flight SQL Driver for Metabase.
 
   This driver uses the Apache Arrow Flight SQL JDBC driver.
-  The connection URI is built following the format:
-
-      jdbc:arrow-flight-sql://HOST:PORT[/?param1=val1&param2=val2&...]
-
-  Supported parameters include:
-
-    - user: the user for authentication
-    - password: the password for authentication
-    - token: an optional token for authentication
-    - useEncryption: whether to use TLS (default true)
-
-  For more details see the Flight SQL JDBC Driver documentation."
+  ...
+  "
   (:require
    [clojure.string :as str]
    [clojure.java.jdbc :as jdbc]
-   [ring.util.codec :as codec]                        ;; Use Ring’s codec for URL encoding
+   [ring.util.codec :as codec]
    [metabase.driver :as driver]
    [metabase.driver.common :as driver.common]
+   [honey.sql :as sql]
    [metabase.driver.sql-jdbc :as sql-jdbc]
    [metabase.driver.sql-jdbc.common :as sql-jdbc.common]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.util.log :as log]
+   [metabase.driver.sql.query-processor :as sql.qp]
    [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
-   [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
-   )
-  )
+   [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]))
+
 
 ;; Register this driver as a JDBC-based driver with parent :sql-jdbc.
 (driver/register! :arrow-flight-sql, :parent #{:sql-jdbc})
 
-;; Provide a human-friendly display name.
 (defmethod driver/display-name :arrow-flight-sql [_]
   "Arrow Flight SQL")
 
-;; Define supported features.
 (doseq [[feature supported?]
         {:describe-fields           true
          :connection-impersonation  false
@@ -50,10 +39,10 @@
     s
     default))
 
+;; Build a connection spec from the database details.
 (defmethod sql-jdbc.conn/connection-details->spec :arrow-flight-sql
   [_ details]
   (-> (merge
-        ;; Default connection parameters for Flight SQL
        {:classname   "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver"
         :subprotocol "arrow-flight-sql"
         :subname     (let [host (if (and (string? (:host details))
@@ -78,23 +67,16 @@
                        (str "//" host ":" port
                             (when (not (str/blank? query-params))
                               (str "/?" query-params))))
-         ;; Add casting logic to prevent Timestamp → LocalDateTime class cast errors
         :cast        (fn [col val]
                        (cond
                          (and (= (:base-type col) :type/DateTime)
                               (instance? java.sql.Timestamp val))
                          (.toLocalDateTime ^java.sql.Timestamp val)
-
                          :else val))}
-        ;; Clean up any internal config keys
        (dissoc details :host :port))
-      ;; Process other options
       (sql-jdbc.common/handle-additional-options details)))
 
-
-
-
-;; Example implementation for testing the connection.
+;; Connection test (unchanged)
 (defmethod driver/can-connect? :arrow-flight-sql
   [driver details]
   (try
@@ -105,75 +87,121 @@
       (log/error e "Flight SQL connection test failed.")
       false)))
 
-;; Additional methods (describe-database, describe-table, etc.) can remain unchanged.
-
-
+;; Map raw database types to Metabase types.
 (defmethod sql-jdbc.sync/database-type->base-type :arrow-flight-sql
   [_driver base-type]
-  (let [normalized (-> base-type
-                       str
-                       str/upper-case
-                       keyword)]
+  (let [normalized (-> base-type str str/upper-case keyword)]
     (case normalized
-      ;; Boolean
       :BOOLEAN            :type/Boolean
-
-      ;; Integers
-      :INT8              :type/Integer
-      :INT16             :type/Integer
-      :INT32             :type/Integer
-      :INT64             :type/BigInteger
-      :UINT8             :type/Integer
-      :UINT16            :type/Integer
-      :UINT32            :type/BigInteger
-      :UINT64            :type/BigInteger
-
-      ;; Floating point
-      :FLOAT16           :type/Float
-      :FLOAT32           :type/Float
-      :FLOAT64           :type/Float
-
-      ;; Decimal
-      :DECIMAL128        :type/Decimal
-      :DECIMAL256        :type/Decimal
-
-      ;; Time and date
-      :DATE32            :type/Date
-      :TIME32            :type/Time
-      :TIME64            :type/Time
-      :TIMESTAMP         :type/DateTime
+      :INT8               :type/Integer
+      :INT16              :type/Integer
+      :INT32              :type/Integer
+      :INT64              :type/BigInteger
+      :UINT8              :type/Integer
+      :UINT16             :type/Integer
+      :UINT32             :type/BigInteger
+      :UINT64             :type/BigInteger
+      :FLOAT16            :type/Float
+      :FLOAT32            :type/Float
+      :FLOAT64            :type/Float
+      :DECIMAL128         :type/Decimal
+      :DECIMAL256         :type/Decimal
+      :DATE32             :type/Date
+      :TIME32             :type/Time
+      :TIME64             :type/Time
+      :TIMESTAMP          :type/DateTime
       :TIMESTAMP_MILLISECOND :type/DateTime
       :TIMESTAMP_MICROSECOND :type/DateTime
       :TIMESTAMP_NANOSECOND  :type/DateTime
-
-      ;; Strings and binary
-      :UTF8              :type/Text
-      :BINARY            :type/*
-      :FIXED_SIZE_BINARY :type/*
-      :INTERVAL          :type/*
-
-      ;; Fallback
+      :UTF8               :type/Text
+      :BINARY             :type/*
+      :FIXED_SIZE_BINARY  :type/*
+      :INTERVAL           :type/*
       :type/*)))
 
-
-
+;; Read column thunk for TIMESTAMP columns.
 (defmethod sql-jdbc.execute/read-column-thunk [:arrow-flight-sql java.sql.Types/TIMESTAMP]
   [_driver ^java.sql.ResultSet rs _rsmeta ^Integer i]
   (fn []
     (some-> (.getTimestamp rs i)
             .toLocalDateTime)))
 
+;; -------------------------------
+;; Custom Schema Sync Implementations
+;; -------------------------------
+
+;; List tables using SHOW TABLES.
 (defmethod driver/describe-database :arrow-flight-sql
   [driver database]
-  (sql-jdbc.execute/do-with-connection-with-options
-   driver
-   database
-   nil  ;; connection options (not needed for now)
-   (fn [^java.sql.Connection conn]
-     (let [rows (jdbc/query {:connection conn} ["SHOW TABLES"])
-           user-tables (filter #(= "BASE TABLE" (:table_type %)) rows)
-           formatted (map (fn [row]
-                            {:name   (:table_name row)
-                             :schema (:table_schema row)})
-                          user-tables)]
-       {:tables (into #{} formatted)}))))
+  (let [spec (sql-jdbc.conn/connection-details->spec :arrow-flight-sql (:details database))]
+    (with-open [conn (jdbc/get-connection spec)]
+      (let [rows (jdbc/query {:connection conn}
+                             ["SHOW TABLES"]
+                             {:identifiers str/lower-case})
+            ;; You can adjust filtering here if needed.
+            formatted (map (fn [row]
+                             {:name   (:table_name row)
+                              :schema (:table_schema row)})
+                           rows)]
+        {:tables (into #{} formatted)}))))
+
+(defmethod driver/describe-table :arrow-flight-sql
+  [_ driver database {:keys [name schema]}]
+  (let [spec (sql-jdbc.conn/connection-details->spec :arrow-flight-sql (:details database))]
+    (with-open [conn (jdbc/get-connection spec)]
+      (let [query   (format "DESCRIBE \"%s\".\"%s\"" schema name)
+            results (jdbc/query {:connection conn} [query] {:identifiers str/lower-case})
+            fields  (mapv (fn [{:keys [column_name data_type is_nullable]}]
+                            (let [normalized-name (-> column_name
+                                                      (str/replace #"^\"|\"$" "")
+                                                      str/lower-case)]
+                              {:name          normalized-name
+                               :database-type data_type
+                               :base-type     (sql-jdbc.sync/database-type->base-type driver data_type)
+                               :nullable      (= "yes" (str/lower-case is_nullable))
+                               :field-comment ""}))   ;; provide default comment here
+                          results)]
+        (log/info "DESCRIBE query:" query)
+        (log/info "DESCRIBE raw results:" results)
+        (log/info "Parsed fields:" fields)
+        {:name name
+         :schema schema
+         :fields fields}))))
+
+
+
+;; Return an empty set for foreign keys (FKs) since FlightSQL doesn’t support imported keys.
+(defmethod driver/describe-table-fks :arrow-flight-sql
+  [_ _ _]
+  ;; Return an empty set so that FK sync doesn’t fail.
+  #{})
+
+
+
+(defmethod sql-jdbc.sync/describe-fields-sql :arrow-flight-sql
+   [driver & {:keys [schema-names table-names details]}]
+   (let [base-condition [:>= [:inline 1] [:inline 1]]
+         schema-condition (when (seq schema-names)
+                            [:in [:lower :table_schema]
+                             (mapv (fn [s] [:inline (str/lower-case s)]) schema-names)])
+         table-condition (when (seq table-names)
+                           [:in [:lower :table_name]
+                            (mapv (fn [t] [:inline (str/lower-case t)]) table-names)])
+         where-clause (cond-> [base-condition]
+                        schema-condition (conj schema-condition)
+                        table-condition (conj table-condition))]
+     (sql/format
+      {:select [[:column_name :name]
+                [:ordinal_position :database-position]
+                [:table_schema :table-schema]
+                [:table_name :table-name]
+                [[[:upper :data_type]] :database-type]
+                [[:inline false] :database-is-auto-increment]
+                [[:case-expr [:= :is_nullable [:inline "NO"]] [:inline true] [:inline false]]
+                 :database-required]
+                [[:inline ""] :field-comment]]
+       :from [[:information_schema.columns]]
+       :where (vec (cons :and where-clause))
+       :order-by [:table_schema :table_name :ordinal_position]}
+      :dialect (sql.qp/quote-style driver))))
+
