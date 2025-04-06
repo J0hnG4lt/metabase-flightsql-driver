@@ -64,7 +64,7 @@ Advanced options can be set via the additional-options field.
 To integrate the driver into Metabase:
 
 1. Place the JAR in the Plugins Directory  
-   Ensure that the built uberjar (metabase-driver-0.1.0-SNAPSHOT.jar) is located in the Metabase plugins directory.
+   Ensure that the built uberjar (`metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar`) is located in the Metabase plugins directory and rename it to `flightsql-metabase-driver.jar`.
 
 2. Update the Metabase Container  
    Modify your container settings (as shown above) to mount the driver JAR into the /plugins directory.
