@@ -28,29 +28,23 @@ A Clojure library that enables Metabase to connect to databases using the Apache
 
    lein uberjar
 
+
+The docker-compose file also contains a builder service, so don´t worry if you have issues when installing lein and clojure.
+
 ### Deploying with Podman Compose
 
-1. Make sure your Podman Compose configuration is set up. For example:
+Run the following command:
 
-   services:
-     metabase:
-       image: metabase/metabase:latest
-       container_name: metabase
-       volumes:
-         - /path/to/metabase-driver-0.1.0-SNAPSHOT.jar:/plugins/metabase-driver-0.1.0-SNAPSHOT.jar
-       ports:
-         - "3000:3000"
-       environment:
-         MB_DB_TYPE: postgres
-         MB_DB_DBNAME: metabaseappdb
-         MB_DB_PORT: 5432
-         MB_DB_USER: metabase
-         MB_DB_PASS: mysecretpassword
-         MB_DB_HOST: postgres
+```
+podman compose up --build
+```
 
-2. Start the Containers
+This launches the following services:
 
-   podman compose up --build
+1. Builder: this uses lein to produce an uberjar that is stored in a volume.
+2. Spice AI: this allows us to read a parquet and make it available through the Arrow Flight SQL protocol.
+3. Postgres: this is the internal database used by Metabase.
+4. Metabase: this is the BI tool for which we are building this driver. It reads the JAR from the builder services and it uses postgres to store its configuration, charts, dashboards, etc. 
 
 ## Configuration
 
@@ -61,7 +55,7 @@ When setting up the connection in Metabase, the driver registers under the name 
 - User: (Optional) – Username for authentication.
 - Password: (Optional) – Password for authentication (supports secret merging).
 - Token: (Optional) – A secure token for connection.
-- Use Encryption: (Default: true) – Enable or disable connection encryption.
+- Use Encryption: (Default: true) – Enable or disable connection encryption. We don´t use this in our tests.
 
 Advanced options can be set via the additional-options field.
 
@@ -107,6 +101,11 @@ A simplified overview of the project structure:
 Copyright © 2025 Georvic Tur
 
 This project is available under the terms of the Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0), which is the most permissive license possible that is compatible with Flight SQL and Metabase. Additionally, the source code may be distributed under the terms of the Eclipse Public License 2.0 (http://www.eclipse.org/legal/epl-2.0) or the GNU General Public License (GPL) version 2 or later with the GNU Classpath Exception, subject to the conditions specified in the Eclipse Public License.
+
+## AI-Assisted Development
+
+This project was built with help from ChatGPT, along with reference to the Metabase repository and several of its existing drivers. While I'm not a Clojure developer by background, these tools made development much more approachable.
+
 
 ## Contributing
 
