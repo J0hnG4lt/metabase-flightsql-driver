@@ -8,8 +8,6 @@ RUN curl -O https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/l
     && mv lein /usr/local/bin/lein \
     && chmod +x /usr/local/bin/lein
 
-WORKDIR /app
-COPY . /app
+WORKDIR /builder
 
-# Build the uberjar
-RUN lein uberjar
+

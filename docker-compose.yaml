@@ -5,33 +5,36 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.lein
-    working_dir: /app
+    working_dir: /builder
     volumes:
-      - jar-volume:/jar
-      - .:/app
+      - jar-volume:/builder/target
+      - .:/builder
     command: >
-      sh -c "lein uberjar &&
-             cp target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar /jar/flightsql-metabase-driver.jar &&
-             ls -l /jar &&
-             echo 'Build complete' &&
-             exit 0"
+        sh -c "set -x &&
+              rm -f /builder/target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar &&
+              lein uberjar"
     restart: "no"
-
-
 
   metabase:
     image: metabase/metabase:v0.54.1.4
     container_name: metabase
     hostname: metabase
     depends_on:
+      - postgres
+      - spiced
       - builder
     volumes:
-      - jar-volume:/jar
+      - jar-volume:/builder/target
       - /dev/urandom:/dev/random:ro
     command: >
-      sh -c "cp /jar/flightsql-metabase-driver.jar /plugins/flightsql-metabase-driver.jar &&
-             echo 'Plugin copied, starting Metabase' &&
-             exec /app/run_metabase.sh"
+      sh -c "while [ ! -f /builder/target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar ]; do
+              echo 'Waiting for jar file...';
+              sleep 1;
+            done &&
+            sleep 5 &&
+            cp /builder/target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar /plugins/flightsql-metabase-driver.jar &&
+            echo 'Plugin copied, starting Metabase' &&
+            exec /app/run_metabase.sh"
     ports:
       - "3000:3000"
     environment:
