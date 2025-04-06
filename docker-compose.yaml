@@ -67,6 +67,9 @@ services:
     container_name: spiced-container
     privileged: true
     user: root
+    # this tmpfs prevents an error when the setup script of the dockerfile tries to create this folder after an initial run
+    tmpfs:
+      - /spice_sandbox
     volumes:
       - type: bind
         source: ./spicepod.yaml
