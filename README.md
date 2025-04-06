@@ -106,6 +106,11 @@ This project is available under the terms of the Apache License 2.0 (https://www
 
 This project was built with help from ChatGPT, along with reference to the Metabase repository and several of its existing drivers. While I'm not a Clojure developer by background, these tools made development much more approachable.
 
+## Features that have been tested so far
+
+- SQL Native queries
+- Graphical query editor (manual changes of the metadata are needed at the moment)
+- Database syncs
 
 ## Contributing
 
