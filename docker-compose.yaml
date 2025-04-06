@@ -1,15 +1,39 @@
+version: "2.4"
+
 services:
+  builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.lein
+    working_dir: /app
+    volumes:
+      - jar-volume:/jar
+      - .:/app
+    command: >
+      sh -c "lein uberjar &&
+             cp target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar /jar/flightsql-metabase-driver.jar &&
+             ls -l /jar &&
+             echo 'Build complete' &&
+             exit 0"
+    restart: "no"
+
+
+
   metabase:
     image: metabase/metabase:latest
     container_name: metabase
     hostname: metabase
+    depends_on:
+      - builder
     volumes:
+      - jar-volume:/jar
       - /dev/urandom:/dev/random:ro
-      - type: bind
-        source: C:\Users\DEEPGAMING\workspace\repos\metabase-flightsql-driver\target\metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar
-        target: /plugins/flightsql-metabase-driver.jar
+    command: >
+      sh -c "cp /jar/flightsql-metabase-driver.jar /plugins/flightsql-metabase-driver.jar &&
+             echo 'Plugin copied, starting Metabase' &&
+             exec /app/run_metabase.sh"
     ports:
-      - 3000:3000
+      - "3000:3000"
     environment:
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabaseappdb
@@ -20,10 +44,11 @@ services:
     networks:
       - metanet1
     healthcheck:
-      test: curl --fail -I http://localhost:3000/api/health || exit 1
+      test: ["CMD", "curl", "--fail", "-I", "http://localhost:3000/api/health"]
       interval: 15s
       timeout: 5s
       retries: 5
+
   postgres:
     image: postgres:latest
     container_name: postgres
@@ -44,20 +69,18 @@ services:
     user: root
     volumes:
       - type: bind
-        source: C:\Users\DEEPGAMING\workspace\repos\metabase-flightsql-driver\spicepod.yaml
+        source: ./spicepod.yaml
         target: /app/spicepod.yaml
       - type: bind
-        source: C:\Users\DEEPGAMING\workspace\repos\metabase-flightsql-driver\data
+        source: ./data
         target: /app/data
     command: "--http 0.0.0.0:8090 --metrics 0.0.0.0:9090 --flight 0.0.0.0:50051"
     ports:
-      - '50051:50051'
-      - '8090:8090'
-      - '9090:9090'
+      - "50051:50051"
+      - "8090:8090"
+      - "9090:9090"
     networks:
       - metanet1
-
-
 
 networks:
   metanet1:
@@ -65,3 +88,4 @@ networks:
 
 volumes:
   pgdata:
+  jar-volume:
