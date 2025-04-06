@@ -1,17 +1,11 @@
 (ns metabase.driver.flightsql
   "Arrow Flight SQL Driver for Metabase.
 
-  This driver uses the Apache Arrow Flight SQL JDBC driver.
-  ...
-  "
+  This driver uses the Apache Arrow Flight SQL JDBC driver."
   (:require
    [clojure.string :as str]
-   [clojure.java.jdbc :as jdbc]
    [ring.util.codec :as codec]
    [metabase.driver :as driver]
-   [metabase.driver.common :as driver.common]
-   [honey.sql :as sql]
-   [metabase.driver.sql-jdbc :as sql-jdbc]
    [metabase.driver.sql-jdbc.common :as sql-jdbc.common]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.util.log :as log]
@@ -19,13 +13,13 @@
    [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]))
 
-
-;; Register this driver as a JDBC-based driver with parent :sql-jdbc.
+;; Register the driver under the keyword :arrow-flight-sql, extending SQL-JDBC functionality.
 (driver/register! :arrow-flight-sql, :parent #{:sql-jdbc})
 
 (defmethod driver/display-name :arrow-flight-sql [_]
   "Arrow Flight SQL")
 
+;; Define driver capabilities.
 (doseq [[feature supported?]
         {:describe-fields           true
          :connection-impersonation  false
@@ -34,21 +28,19 @@
     [_driver _feature _db]
     supported?))
 
+;; Utility to return default if a string is blank.
 (defn non-blank [s default]
   (if (and (string? s) (not (str/blank? s)))
     s
     default))
 
-;; Build a connection spec from the database details.
+;; Generate a connection spec for the Flight SQL JDBC driver.
 (defmethod sql-jdbc.conn/connection-details->spec :arrow-flight-sql
   [_ details]
   (-> (merge
        {:classname   "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver"
         :subprotocol "arrow-flight-sql"
-        :subname     (let [host (if (and (string? (:host details))
-                                         (not (str/blank? (:host details))))
-                                  (:host details)
-                                  "localhost")
+        :subname     (let [host (non-blank (:host details) "localhost")
                            port (if (or (nil? (:port details))
                                         (and (string? (:port details))
                                              (str/blank? (:port details))))
@@ -76,7 +68,7 @@
        (dissoc details :host :port))
       (sql-jdbc.common/handle-additional-options details)))
 
-;; Connection test (unchanged)
+;; Attempt to connect using the generated spec; log and return result.
 (defmethod driver/can-connect? :arrow-flight-sql
   [driver details]
   (try
@@ -87,7 +79,7 @@
       (log/error e "Flight SQL connection test failed.")
       false)))
 
-;; Map raw database types to Metabase types.
+;; Map Flight SQL types to Metabase base types.
 (defmethod sql-jdbc.sync/database-type->base-type :arrow-flight-sql
   [_driver base-type]
   (let [normalized (-> base-type str str/upper-case keyword)]
@@ -119,18 +111,14 @@
       :INTERVAL           :type/*
       :type/*)))
 
-;; Read column thunk for TIMESTAMP columns.
+;; Handle TIMESTAMP result set column decoding.
 (defmethod sql-jdbc.execute/read-column-thunk [:arrow-flight-sql java.sql.Types/TIMESTAMP]
   [_driver ^java.sql.ResultSet rs _rsmeta ^Integer i]
   (fn []
     (some-> (.getTimestamp rs i)
             .toLocalDateTime)))
 
-;; -------------------------------
-;; Custom Schema Sync Implementations
-;; -------------------------------
-
-;; List tables using SHOW TABLES.
+;; Return table metadata using SHOW TABLES.
 (defmethod driver/describe-database :arrow-flight-sql
   [driver database]
   (let [spec (sql-jdbc.conn/connection-details->spec :arrow-flight-sql (:details database))]
@@ -145,7 +133,7 @@
                                    :schema (:table_schema row)})))]
         {:tables (into #{} formatted)}))))
 
-
+;; Return column definitions using DESCRIBE.
 (defmethod driver/describe-table :arrow-flight-sql
   [_ driver database {:keys [name schema]}]
   (let [spec (sql-jdbc.conn/connection-details->spec :arrow-flight-sql (:details database))]
@@ -160,7 +148,7 @@
                                :database-type data_type
                                :base-type     (sql-jdbc.sync/database-type->base-type driver data_type)
                                :nullable      (= "yes" (str/lower-case is_nullable))
-                               :field-comment ""}))   ;; provide default comment here
+                               :field-comment ""}))
                           results)]
         (log/info "DESCRIBE query:" query)
         (log/info "DESCRIBE raw results:" results)
@@ -169,40 +157,35 @@
          :schema schema
          :fields fields}))))
 
-
-
-;; Return an empty set for foreign keys (FKs) since FlightSQL doesn’t support imported keys.
+;; Return an empty set since FK introspection isn’t supported.
 (defmethod driver/describe-table-fks :arrow-flight-sql
   [_ _ _]
-  ;; Return an empty set so that FK sync doesn’t fail.
   #{})
 
-
-
+;; SQL expression to fetch column metadata (used during sync).
 (defmethod sql-jdbc.sync/describe-fields-sql :arrow-flight-sql
-   [driver & {:keys [schema-names table-names details]}]
-   (let [base-condition [:>= [:inline 1] [:inline 1]]
-         schema-condition (when (seq schema-names)
-                            [:in [:lower :table_schema]
-                             (mapv (fn [s] [:inline (str/lower-case s)]) schema-names)])
-         table-condition (when (seq table-names)
-                           [:in [:lower :table_name]
-                            (mapv (fn [t] [:inline (str/lower-case t)]) table-names)])
-         where-clause (cond-> [base-condition]
-                        schema-condition (conj schema-condition)
-                        table-condition (conj table-condition))]
-     (sql/format
-      {:select [[:column_name :name]
-                [:ordinal_position :database-position]
-                [:table_schema :table-schema]
-                [:table_name :table-name]
-                [[[:upper :data_type]] :database-type]
-                [[:inline false] :database-is-auto-increment]
-                [[:case-expr [:= :is_nullable [:inline "NO"]] [:inline true] [:inline false]]
-                 :database-required]
-                [[:inline ""] :field-comment]]
-       :from [[:information_schema.columns]]
-       :where (vec (cons :and where-clause))
-       :order-by [:table_schema :table_name :ordinal_position]}
-      :dialect (sql.qp/quote-style driver))))
-
+  [driver & {:keys [schema-names table-names details]}]
+  (let [base-condition [:>= [:inline 1] [:inline 1]]
+        schema-condition (when (seq schema-names)
+                           [:in [:lower :table_schema]
+                            (mapv (fn [s] [:inline (str/lower-case s)]) schema-names)])
+        table-condition (when (seq table-names)
+                          [:in [:lower :table_name]
+                           (mapv (fn [t] [:inline (str/lower-case t)]) table-names)])
+        where-clause (cond-> [base-condition]
+                       schema-condition (conj schema-condition)
+                       table-condition (conj table-condition))]
+    (sql/format
+     {:select [[:column_name :name]
+               [:ordinal_position :database-position]
+               [:table_schema :table-schema]
+               [:table_name :table-name]
+               [[[:upper :data_type]] :database-type]
+               [[:inline false] :database-is-auto-increment]
+               [[:case-expr [:= :is_nullable [:inline "NO"]] [:inline true] [:inline false]]
+                :database-required]
+               [[:inline ""] :field-comment]]
+      :from [[:information_schema.columns]]
+      :where (vec (cons :and where-clause))
+      :order-by [:table_schema :table_name :ordinal_position]}
+     :dialect (sql.qp/quote-style driver))))
