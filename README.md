@@ -104,7 +104,7 @@ A simplified overview of the project structure:
 ```
 ## License
 
-Copyright © 2025 [Your Name]
+Copyright © 2025 Georvic Tur
 
 This project is available under the terms of the Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0), which is the most permissive license possible that is compatible with Flight SQL and Metabase. Additionally, the source code may be distributed under the terms of the Eclipse Public License 2.0 (http://www.eclipse.org/legal/epl-2.0) or the GNU General Public License (GPL) version 2 or later with the GNU Classpath Exception, subject to the conditions specified in the Eclipse Public License.
 
