@@ -2,6 +2,8 @@
 
 A Clojure library that enables Metabase to connect to databases using the Apache Arrow Flight SQL JDBC driver. This driver integrates Arrow Flight SQL into Metabase, delivering enhanced performance and advanced SQL querying capabilities.
 
+My main goal was to allow Metabase to use [Spice.ai OSS](https://spiceai.org/docs) as a cache layer.
+
 ## Features
 
 - JDBC-based integration: Leverages the Apache Arrow Flight SQL JDBC driver.
