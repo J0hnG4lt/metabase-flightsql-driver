@@ -85,16 +85,12 @@ A simplified overview of the project structure:
 
 ```
 .
-├── .calva
-├── .clj-kondo
 ├── data
-├── doc
-├── node_modules
+├── docs
 ├── resources
 ├── src
 │   └── metabase
 │       └── driver
-└── target
 ```
 ## License
 
