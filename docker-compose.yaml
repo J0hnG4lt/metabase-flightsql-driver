@@ -29,9 +29,9 @@ services:
     command: >
       sh -c "while [ ! -f /builder/target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar ]; do
               echo 'Waiting for jar file...';
-              sleep 1;
+              sleep 5;
             done &&
-            sleep 5 &&
+            sleep 10 &&
             cp /builder/target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar /plugins/flightsql-metabase-driver.jar &&
             echo 'Plugin copied, starting Metabase' &&
             exec /app/run_metabase.sh"
