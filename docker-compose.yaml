@@ -14,7 +14,7 @@ services:
     restart: "no"
 
   metabase:
-    image: metabase/metabase:v0.57.7
+    image: metabase/metabase:v0.62.4
     container_name: metabase
     hostname: metabase
     depends_on:
