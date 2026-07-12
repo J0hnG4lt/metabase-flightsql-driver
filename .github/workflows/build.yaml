@@ -15,6 +15,11 @@ jobs:
       uses: actions/checkout@v4
       with:
         repository: metabase/metabase
+        # Pin to the Metabase version the driver ships against. Building against
+        # an unpinned master breaks whenever upstream restructures modules/drivers
+        # (e.g. sqlite/druid were removed from modules/drivers after v0.62), which
+        # ci/deps.edn still references as :local/root siblings.
+        ref: v0.62.4
         path: metabase
 
     - name: Checkout driver code
