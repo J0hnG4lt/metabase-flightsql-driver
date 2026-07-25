@@ -5,7 +5,7 @@
   ...
   " 
   (:import
-   (java.sql Connection PreparedStatement ResultSet Timestamp Types Date Time)
+   (java.sql Connection PreparedStatement ResultSet Timestamp)
    (java.time LocalDate LocalTime LocalDateTime OffsetDateTime)
    )
   (:require
@@ -151,48 +151,59 @@
       nil)))
 
 (defn- auth-query-params
-  "Query-string fragments for the selected authentication method.
+  "Query-string fragments for the configured authentication.
 
-  Modes (see metabase-plugin.yaml for the matching UI fields):
-    :user-password  Flight handshake basic auth. A blank username with a
-                    password is emitted as user=&password=<pw> — the Spice.ai
-                    API-key convention.
-    :token          authorization=Bearer <token> (InfluxDB 3 tokens, Dremio
-                    PATs, any pre-issued bearer/API token).
-    :jwt            GizmoSQL-style external JWT: literal user \"token\" with
-                    the JWT as password.
-    :none           anonymous.
+  - use-token true (UI toggle; legacy auth-method \"token\" also honored)
+    -> authorization=Bearer <token> (InfluxDB 3 tokens, Dremio PATs, any
+       pre-issued bearer/API token)
+  - username + password -> Flight handshake basic auth. A blank username with
+    a password is emitted as user=&password=<pw> — the Spice.ai API-key
+    convention. GizmoSQL external JWTs use the literal username \"token\"
+    with the JWT as the password.
+  - nothing configured -> anonymous.
 
-  Connections created before the auth-method dropdown existed carry no
-  :auth-method key; the mode is inferred from which credentials are present."
-  [driver {:keys [auth-method username user password] :as details}]
+  Connections created before the use-token toggle carry neither flag; the
+  mode is inferred from which credentials are present."
+  [driver {:keys [use-token auth-method username user password] :as details}]
   (let [username* (or (non-blank-str username) (non-blank-str user))
         password* (non-blank-str password)
         token*    (secret-string driver details "token")
-        jwt*      (secret-string driver details "jwt")
-        method    (or (some-> (non-blank-str auth-method) keyword)
-                      (cond
-                        token*    :token
-                        password* :user-password
-                        :else     :none))]
-    (case method
-      :user-password (cond
-                       (and username* password*)
-                       [(str "user=" (codec/url-encode username*))
-                        (str "password=" (codec/url-encode password*))]
+        token?    (cond
+                    (some? use-token)           (boolean use-token)
+                    (non-blank-str auth-method) (contains? #{"token" "jwt"} auth-method)
+                    :else                       (some? token*))]
+    (cond
+      (and token? token*)
+      [(str "authorization=Bearer%20" (codec/url-encode token*))]
 
-                       password*
-                       ["user=" (str "password=" (codec/url-encode password*))]
+      (and username* password*)
+      [(str "user=" (codec/url-encode username*))
+       (str "password=" (codec/url-encode password*))]
 
-                       :else [])
-      :token         (if token*
-                       [(str "authorization=Bearer%20" (codec/url-encode token*))]
-                       [])
-      :jwt           (if jwt*
-                       ["user=token" (str "password=" (codec/url-encode jwt*))]
-                       [])
-      :none          []
-      [])))
+      password*
+      ["user=" (str "password=" (codec/url-encode password*))]
+
+      :else [])))
+
+;; ----------------------------------------------------------------
+;; Backfill the use-token toggle on details created before it existed, so the
+;; admin form opens in the right mode when editing (the token field is hidden
+;; behind visible-if use-token — without the flag, a stored token would be
+;; invisible and could be lost on save).
+(defn- backfill-auth-flags [details]
+  (if (or (not (map? details)) (contains? details :use-token) (empty? details))
+    details
+    (let [token? (boolean (or (contains? #{"token" "jwt"} (:auth-method details))
+                              (non-blank-str (:token details))
+                              (:token-id details)
+                              (non-blank-str (:token-value details))))]
+      (assoc details :use-token token?))))
+
+(defmethod driver/normalize-db-details :arrow-flight-sql
+  [_driver database]
+  (cond-> (update database :details backfill-auth-flags)
+    (:write-data-details database) (update :write-data-details backfill-auth-flags)
+    (:admin-details database)      (update :admin-details backfill-auth-flags)))
 
 (defmethod sql-jdbc.conn/connection-details->spec :arrow-flight-sql
   [driver details]

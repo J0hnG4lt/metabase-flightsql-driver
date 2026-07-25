@@ -33,14 +33,25 @@ Or run the `/rebuild-driver` command.
 4. **Feature keywords are validated.** Declaring a feature Metabase doesn't know **throws at load**. Check `metabase.driver/features` for the pinned version before adding flags; `describe-table-fks` no longer exists on 0.63+.
 5. **Set connection options only at depth 0** (`sql-jdbc.execute/recursive-connection?` guard) and honor `(:write? options)` — forcing read-only would break future uploads/actions.
 
-## Auth modes (manifest `auth-method` ↔ spec builder)
+## Auth modes (manifest `use-token` toggle ↔ spec builder)
 
-| Mode | JDBC params | Servers |
+The manifest linter (`bin/build/src/build_drivers/lint_manifest_file.clj` in
+the Metabase repo) only allows property types `string/text/textFile/boolean/
+secret/info/schema-filters/section/password` — no `select`, no `integer` —
+which is why auth is a boolean toggle (the Databricks `use-m2m` pattern), not
+a dropdown. The runtime supports more types than the yaml linter accepts;
+always validate manifest changes against the linter (CI build does).
+
+| Configuration | JDBC params | Servers |
 |---|---|---|
-| `user-password` | `user=…&password=…` (blank user + password = Spice API key) | GizmoSQL, Dremio, Doris, StarRocks, Denodo |
-| `token` | `authorization=Bearer …` | InfluxDB 3, Dremio PAT, pre-issued JWTs |
-| `jwt` | `user=token&password=<JWT>` | GizmoSQL external JWT |
-| `none` | (nothing) | ROAPI, kamu, Ballista, unauthenticated Spice |
+| toggle off, user+password | `user=…&password=…` | GizmoSQL, Dremio, Doris, StarRocks, Denodo |
+| toggle off, blank user + password | `user=&password=…` | Spice.ai API key |
+| toggle off, username literally `token` + JWT password | `user=token&password=<JWT>` | GizmoSQL external JWT |
+| toggle on + token secret | `authorization=Bearer …` | InfluxDB 3, Dremio PAT, pre-issued JWTs |
+| everything blank | (nothing) | ROAPI, kamu, Ballista, unauthenticated Spice |
+
+Legacy details without `use-token` are inferred, and `normalize-db-details`
+backfills the flag so the admin form opens in the right mode.
 
 mTLS/CA material: secret pem-cert props materialized to files → `tlsRootCerts` / `clientCertificate` / `clientKey`. `additional-options` is the escape hatch for `oauth.*`, `retainAuth`, `threadPoolSize`, and custom gRPC headers (unknown params are forwarded as headers — e.g. `database=<db>` for InfluxDB 3).
 

@@ -22,6 +22,21 @@ CI builds one jar per supported Metabase release line (see release assets):
 | 0.0.9 | v0.62.4 | 18.2.0 |
 | 0.0.5 – 0.0.8 | v0.55 – v0.62 | 18.2.0 |
 
+## Upgrading from 0.0.x
+
+Drop-in: replace the plugin jar (pick the `-mb62`/`-mb63` release asset matching your Metabase line) and restart Metabase. Existing connections keep working — the driver auto-detects legacy details (plain username/password or token) and backfills the new auth toggle on read.
+
+After upgrading, open each Flight SQL connection in **Admin → Databases** and hit **Save** once: this persists the backfilled auth flag and re-validates the connection.
+
+Behavior changes to be aware of:
+
+- **New** connections default to *Use Encryption ON* (previously off). Existing connections keep their stored setting.
+- Tokens entered through the admin UI now actually work (previously only API-created connections could authenticate with tokens).
+- `convertTimezone()` no longer appears in the expression editor — it was advertised but never worked.
+- FK metadata is no longer probed during sync (it always returned nothing anyway); Metabase-side semantic/FK settings are unaffected.
+- Release assets are now named per Metabase line (`arrow-flight-sql.metabase-driver-mb62.jar`, `-mb63.jar`) — update any download automation.
+- Built and tested against Metabase v0.62.5 and v0.63.1; bundles Arrow Flight SQL JDBC 19.0.0.
+
 ## Installation
 
 ### Prerequisites
@@ -94,11 +109,12 @@ When setting up the connection in Metabase, the driver registers under the name 
 
 - **Host**: (Default: localhost) – The server's hostname or IP address.
 - **Port**: (Default: 443) – The port to use for the connection.
-- **Authentication method** – one of:
-  - *Username and password* – Flight handshake basic auth (GizmoSQL, Dremio, Doris, StarRocks, Denodo…). For **Spice.ai API keys**, leave Username empty and put the key in Password.
-  - *Bearer token / PAT / API key* – sent as `Authorization: Bearer …` (InfluxDB 3 tokens, Dremio PATs, pre-issued JWTs).
-  - *External JWT (GizmoSQL-style)* – connects as user `token` with the JWT as password.
-  - *None (anonymous)* – ROAPI, kamu, Ballista, Spice.ai without auth.
+- **Authentication** – controlled by the *"Authenticate with a token instead of username/password"* toggle:
+  - *Toggle off (default)*: Username + Password → Flight handshake basic auth (GizmoSQL, Dremio, Doris, StarRocks, Denodo…).
+    - **Spice.ai API key**: leave Username empty, put the key in Password.
+    - **GizmoSQL external JWT**: set Username to the literal `token`, JWT in Password.
+  - *Toggle on*: Bearer token / PAT / API key → sent as `Authorization: Bearer …` (InfluxDB 3 tokens, Dremio PATs, pre-issued JWTs).
+  - *Anonymous*: leave all credential fields blank (ROAPI, kamu, Ballista, Spice.ai without auth).
 - **Catalog**: (Optional) - The name of the catalog to use.
 - **Advanced**: server CA certificate, mTLS client certificate/key (PEM secrets), connect timeout, and free-form additional JDBC options (`threadPoolSize`, `retainAuth`, `oauth.*` for OAuth 2.0 client-credentials/token-exchange, or any custom parameter — unknown parameters are forwarded to the server as gRPC headers, e.g. `database=<db>` for InfluxDB 3).
 - **Use Encryption**: (Default: true) – Enable or disable TLS. Switch off for local plaintext servers (the docker-compose demo does this explicitly).

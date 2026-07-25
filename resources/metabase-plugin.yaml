@@ -26,62 +26,48 @@ driver:
         - { placeholder: "443" }
 
     # ------------------------------------------------------------------
-    # Authentication. One dropdown selects the mode; fields below are
-    # shown conditionally (visible-if), following the same pattern the
-    # built-in Databricks (use-m2m) and Snowflake (use-password) drivers use.
+    # Authentication. A boolean toggle switches between username/password
+    # and bearer-token fields — the same pattern the built-in Databricks
+    # (use-m2m) and Snowflake (use-password) drivers use. (The build-time
+    # manifest linter only allows boolean/string/secret/... property types,
+    # so a select dropdown is not authorable in yaml.)
     #
-    # Mode -> JDBC mapping (see connection-details->spec):
-    #   user-password -> user=...&password=...   (Flight handshake basic auth;
-    #                    for Spice.ai API keys leave Username empty and put
-    #                    the key in Password)
-    #   token         -> authorization=Bearer <token>  (InfluxDB 3 tokens,
-    #                    Dremio PATs, any pre-issued bearer token)
-    #   jwt           -> user=token&password=<JWT>     (GizmoSQL external JWT)
-    #   none          -> anonymous (ROAPI, kamu, default Spice.ai, Ballista)
-    - name: auth-method
-      display-name: Authentication method
-      type: select
-      options:
-        - name: Username and password
-          value: user-password
-        - name: Bearer token / PAT / API key
-          value: token
-        - name: External JWT (GizmoSQL-style)
-          value: jwt
-        - name: None (anonymous)
-          value: none
-      default: user-password
+    # Coverage of the Flight SQL auth landscape:
+    #   user/password        -> Flight handshake basic auth (GizmoSQL, Dremio,
+    #                           Doris, StarRocks, Denodo, ...)
+    #   Spice.ai API key     -> leave Username EMPTY, put the key in Password
+    #   GizmoSQL external JWT-> Username literally "token", JWT in Password
+    #   bearer/PAT/API token -> enable "Use token" (InfluxDB 3, Dremio PAT)
+    #   anonymous            -> leave everything blank (ROAPI, kamu, Ballista)
+    #   OAuth2 / headers     -> additional-options (oauth.*, custom params)
+    - name: use-token
+      display-name: Authenticate with a token instead of username/password
+      type: boolean
+      default: false
 
     - name: username
       display-name: Username
       required: false
       visible-if:
-        auth-method: user-password
+        use-token: false
 
     - merge:
         - password
         - display-name: Password
           required: false
           visible-if:
-            auth-method: user-password
+            use-token: false
 
-    # Secret-typed fields are stored as <name>-value / <name>-id in details
-    # and resolved in the driver via driver-api/secret-value-as-string.
+    # Secret-typed field: stored as token-value / token-id in details and
+    # resolved in the driver via driver-api/secret-value-as-string. Sent as
+    # "Authorization: Bearer <token>".
     - name: token
-      display-name: Bearer token
+      display-name: Bearer token / PAT / API key
       type: secret
       secret-kind: password
       required: false
       visible-if:
-        auth-method: token
-
-    - name: jwt
-      display-name: JWT
-      type: secret
-      secret-kind: password
-      required: false
-      visible-if:
-        auth-method: jwt
+        use-token: true
 
     - name: catalog
       display-name: Catalog (optional)
@@ -112,28 +98,40 @@ driver:
 
     # mTLS / custom CA. Stored as secrets; materialized to files and passed
     # to the JDBC driver as tlsRootCerts / clientCertificate / clientKey.
+    # visible-if advanced-options keeps them inside the collapsed section
+    # (the secret expansion does not inherit the section gating on its own).
     - name: tls-root-certs
       display-name: Server CA certificate (PEM)
       type: secret
       secret-kind: pem-cert
       required: false
+      visible-if:
+        advanced-options: true
 
     - name: client-cert
       display-name: mTLS client certificate (PEM)
       type: secret
       secret-kind: pem-cert
       required: false
+      visible-if:
+        advanced-options: true
 
     - name: client-key
       display-name: mTLS client key (PEM)
       type: secret
       secret-kind: pem-cert
       required: false
+      visible-if:
+        advanced-options: true
 
+    # String (not integer): the manifest linter has no integer type; the
+    # driver coerces it.
     - name: connect-timeout-millis
       display-name: Connect timeout (ms)
-      type: integer
+      placeholder: "10000"
       required: false
+      visible-if:
+        advanced-options: true
 
     # Free-form URL parameters appended to the JDBC URL. Doubles as the
     # escape hatch for oauth.* properties (OAuth2 client_credentials /
