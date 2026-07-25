@@ -157,6 +157,12 @@ If using Claude Code, run `/e2e-test` for guided end-to-end testing instructions
 
 ## Troubleshooting
 
+### `podman compose` fails with `root@127.0.0.1: Permission denied`
+On Windows with Docker Desktop installed, `podman compose` delegates to
+`docker-compose.exe` (an external compose provider) which tries to reach a
+Docker host over SSH and fails. Use the pip-installed `podman-compose`
+instead: `pip install podman-compose`, then `podman-compose up -d`.
+
 ### Check Metabase logs
 ```bash
 podman logs metabase 2>&1 | tail -100

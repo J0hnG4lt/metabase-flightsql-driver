@@ -94,26 +94,33 @@ Parameters: 5
 
 ### 6. Test a filtered query
 
-```bash
-API_KEY=$(grep METABASE_API_KEY .env | cut -d'=' -f2)
+Do NOT hardcode a card ID — discover a card mapped to the `status` dashboard
+parameter (card IDs depend on creation order). Note: Metabase ≥0.62 returns
+cards in MBQL5 shape (`stages[0].template-tags`), not legacy
+`native.template-tags`.
 
-podman exec metabase curl -s -H "x-api-key: $API_KEY" \
-  -H "Content-Type: application/json" -X POST \
-  "http://localhost:3000/api/card/44/query" \
-  -d '{"parameters":[{"type":"string/=","value":["Delivered"],"target":["dimension",["template-tag","status"]]}]}' \
-  | python -c "
-import sys,json
-d=json.load(sys.stdin)
-print(f'Status: {d.get(\"status\")}')
-print(f'Rows: {len(d.get(\"data\",{}).get(\"rows\",[]))}')
+```bash
+python -c "
+import json, urllib.request
+key = next(l.split('=',1)[1].strip() for l in open('.env') if l.startswith('METABASE_API_KEY='))
+def req(method, p, body=None):
+    r = urllib.request.Request('http://localhost:3000'+p, method=method,
+        headers={'x-api-key': key, 'Content-Type': 'application/json'},
+        data=json.dumps(body).encode() if body else None)
+    return json.load(urllib.request.urlopen(r, timeout=120))
+dash = req('GET', '/api/dashboard/2')
+card_id = next(dc['card_id'] for dc in dash['dashcards']
+               for pm in dc.get('parameter_mappings') or []
+               if pm.get('parameter_id') == 'status')
+res = req('POST', f'/api/card/{card_id}/query', {
+    'parameters': [{'type':'string/=','value':['Delivered'],'target':['dimension',['template-tag','status']]}]})
+print('Status:', res.get('status'), '| Rows:', len(res.get('data',{}).get('rows',[])))
 "
 ```
 
-**Expected output:**
-```
-Status: completed
-Rows: 9
-```
+**Expected output:** `Status: completed` with rows > 0 (ground truth:
+`SELECT COUNT(*) FROM sales.orders WHERE status='Delivered'` returns 6; a
+JOIN/aggregate card returns fewer rows than that).
 
 ### 7. Verify connection pool health
 
@@ -130,7 +137,7 @@ podman logs metabase 2>&1 | grep -i "hash.*changed" | tail -5
 | Dashboard cards | 32 |
 | Dashboard parameters | 5 (Order Status, Country, Department, Marketing Channel, Date Range) |
 | Filtered query status | `completed` |
-| Filtered query rows | 9 (for status=Delivered) |
+| Filtered query rows | > 0 (card discovered via the status parameter mapping) |
 | Connection pool warnings | None ("Hash of database details changed" should not appear) |
 | GizmoSQL tables synced | 13 tables in memory catalog (analytics, hr, sales schemas) |
 | Spice tables synced | 1 table |
