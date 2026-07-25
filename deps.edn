@@ -1,6 +1,9 @@
 {:paths ["src" "resources"]
 
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
-        org.apache.arrow/flight-sql-jdbc-driver {:mvn/version "18.2.0"}}
+        ;; 19.0.0 (2026-03): suppresses benign close-time gRPC exceptions
+        ;; (GH-863), adds OAuth2 (oauth.* URL props), connectTimeoutMillis,
+        ;; and UUID type support. Requires JDK 17+ (Metabase runs 21).
+        org.apache.arrow/flight-sql-jdbc-driver {:mvn/version "19.0.0"}}
 
 }

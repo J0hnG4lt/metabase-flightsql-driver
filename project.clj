@@ -4,5 +4,5 @@
   :license {:name "Apache-2.0"
             :url "https://www.apache.org/licenses/LICENSE-2.0"}
   :dependencies [[org.clojure/clojure "1.11.1"]
-                 [org.apache.arrow/flight-sql-jdbc-driver "18.2.0"]]
+                 [org.apache.arrow/flight-sql-jdbc-driver "19.0.0"]]
   :repl-options {:init-ns metabase.driver.arrow-flight-sql})
