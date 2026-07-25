@@ -18,7 +18,9 @@ jobs:
       uses: DeLaGuardo/setup-clojure@12.3
       with:
         cli: latest
+        github-token: ${{ secrets.GITHUB_TOKEN }}
         clj-kondo: latest
+        github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Lint driver source
       run: clj-kondo --lint src
@@ -76,6 +78,7 @@ jobs:
       uses: DeLaGuardo/setup-clojure@12.3
       with:
         cli: latest
+        github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Cache Maven + gitlibs
       uses: actions/cache@v4
@@ -158,6 +161,7 @@ jobs:
       uses: DeLaGuardo/setup-clojure@12.3
       with:
         cli: latest
+        github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Cache Maven + gitlibs
       uses: actions/cache@v4
