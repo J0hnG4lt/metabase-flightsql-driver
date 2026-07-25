@@ -111,11 +111,10 @@ jobs:
   # Runs Metabase's own driver test harness (test extensions under test/)
   # against a GizmoSQL service, scoped to the driver's test namespace (which
   # loads the shared test-data dataset through the harness: DDL + INSERT over
-  # Flight SQL, sync, MBQL queries). Marked experimental so remaining dialect
-  # gaps don't block PRs while being burned down.
+  # Flight SQL, validated sync, MBQL known-answer queries) plus the pure unit
+  # tests for the connection spec builder.
   driver-test-suite:
     runs-on: ubuntu-latest
-    continue-on-error: true
     services:
       gizmosql:
         image: gizmodata/gizmosql:v1.35.1
