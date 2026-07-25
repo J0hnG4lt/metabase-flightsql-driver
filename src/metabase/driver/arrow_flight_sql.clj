@@ -45,6 +45,13 @@
 ;; Arrow Flight SQL JDBC driver throws NullPointerException when checking
 ;; supportsTransactionIsolationLevel because some servers (like GizmoSQL)
 ;; don't return required SqlInfo metadata.
+;; Executor used only to unblock stuck socket reads via setNetworkTimeout,
+;; mirroring the default implementation's behavior.
+(defonce ^:private network-timeout-executor
+  (delay (java.util.concurrent.Executors/newCachedThreadPool)))
+
+(def ^:private network-timeout-ms (* 10 60 1000))
+
 (defmethod sql-jdbc.execute/do-with-connection-with-options :arrow-flight-sql
   [driver db-or-id-or-spec options f]
   (sql-jdbc.execute/do-with-resolved-connection
@@ -52,17 +59,28 @@
    db-or-id-or-spec
    options
    (fn [^Connection conn]
-     ;; Skip set-best-transaction-level! which causes NPE with Flight SQL.
-     ;; Just set basic safe options that Flight SQL can handle.
-     (try
-       (.setReadOnly conn true)
-       (catch Exception _ nil))
-     (try
-       (.setAutoCommit conn true)
-       (catch Exception _ nil))
-     (try
-       (.setHoldability conn ResultSet/CLOSE_CURSORS_AT_COMMIT)
-       (catch Exception _ nil))
+     ;; Deliberately skip set-best-transaction-level!: servers with incomplete
+     ;; GetSqlInfo make DatabaseMetaData.supportsTransactionIsolationLevel NPE.
+     ;; Session-timezone is not handled yet, matching :set-timezone unsupported.
+     ;; Like the default impl, only set options on the outermost acquisition so
+     ;; nested (e.g. :write?) scopes are not clobbered.
+     (when-not (sql-jdbc.execute/recursive-connection?)
+       (try
+         ;; a hint for the server, and the honest value for future write support
+         (.setReadOnly conn (not (:write? options)))
+         (catch Throwable _ nil))
+       (when-not (:write? options)
+         (try
+           (.setAutoCommit conn true)
+           (catch Throwable _ nil)))
+       (try
+         ;; releases threads stuck in blocking socket reads; .close alone doesn't
+         (.setNetworkTimeout conn ^java.util.concurrent.Executor @network-timeout-executor
+                             network-timeout-ms)
+         (catch Throwable _ nil))
+       (try
+         (.setHoldability conn ResultSet/CLOSE_CURSORS_AT_COMMIT)
+         (catch Throwable _ nil)))
      (f conn))))
 
 ;; ----------------------------------------------------------------
