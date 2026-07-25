@@ -18,7 +18,6 @@ jobs:
       uses: DeLaGuardo/setup-clojure@12.3
       with:
         cli: latest
-        github-token: ${{ secrets.GITHUB_TOKEN }}
         clj-kondo: latest
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
