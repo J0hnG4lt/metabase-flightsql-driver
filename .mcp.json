@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "metabase": {
+      "command": "npx",
+      "args": ["-y", "@imlewc/metabase-server"],
+      "env": {
+        "METABASE_URL": "http://localhost:3000",
+        "METABASE_API_KEY": "${METABASE_API_KEY}"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(podman compose:*)",
+      "Bash(podman logs:*)",
+      "Bash(podman ps:*)",
+      "Bash(podman machine start:*)",
+      "Bash(podman network inspect:*)",
+      "Bash(podman exec metabase curl:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(gh api:*)",
+      "Bash(gh issue:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh release:*)",
+      "Bash(gh run:*)",
+      "Bash(clj-kondo:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:www.metabase.com)",
+      "WebFetch(domain:arrow.apache.org)",
+      "WebFetch(domain:docs.gizmosql.com)",
+      "WebFetch(domain:spiceai.org)",
+      "WebSearch"
+    ]
+  }
+}
