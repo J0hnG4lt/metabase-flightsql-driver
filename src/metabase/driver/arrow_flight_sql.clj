@@ -67,12 +67,24 @@
 
 ;; ----------------------------------------------------------------
 ;; Register feature support flags for the driver.
-;; This loop defines which features the driver supports.
+;; Note: the :sql parent already defaults ~26 features to true (expressions,
+;; binning, nested-queries, joins, native-parameters, parameterized-sql, ...),
+;; so only deviations from the parent defaults are declared here.
 (doseq [[feature supported?]
-        {:describe-fields           true
+        {;; one streaming information_schema.columns query for the whole DB
+         :describe-fields           true
          :connection-impersonation  false
-         :convert-timezone          true
-         :parameterized-sql         true}]
+         ;; No sql.qp/->honeysql [:arrow-flight-sql :convert-timezone]
+         ;; implementation exists (and there is no [:sql ...] default), so
+         ;; declaring true exposed convertTimezone() in the expression editor
+         ;; only for it to fail at query-compile time.
+         :convert-timezone          false
+         ;; FK metadata is not reliably available across Flight SQL servers.
+         ;; The :sql parent defaults this to true, which (since Metabase 0.63
+         ;; removed describe-table-fks) makes sync call driver/describe-fks,
+         ;; whose sql-jdbc fallback reads JDBC DatabaseMetaData — a path that
+         ;; NPEs on servers with incomplete GetSqlInfo support.
+         :metadata/key-constraints  false}]
   (defmethod driver/database-supports? [:arrow-flight-sql feature]
     [_driver _feature _db]
     supported?))
@@ -294,12 +306,11 @@
         (safely-close-connection conn)))))
 
 ;; ----------------------------------------------------------------
-;; Define a method to describe table foreign keys.
-;; Since FlightSQL does not support imported keys, this returns an empty set.
-(defmethod driver/describe-table-fks :arrow-flight-sql
-  [_ _ _]
-  ;; Return an empty set so that foreign key synchronization doesn't fail.
-  #{})
+;; NOTE: driver/describe-table-fks is intentionally NOT implemented. The
+;; multimethod was removed in Metabase 0.63 (a defmethod on it would fail the
+;; namespace load there); FK sync is disabled via :metadata/key-constraints
+;; false above. If per-backend FK support is wanted later, implement
+;; sql-jdbc.sync/describe-fks-sql against information_schema instead.
 
 ;; ----------------------------------------------------------------
 ;; Describe fields by querying the information_schema.columns table.
