@@ -442,7 +442,9 @@
                [[:inline false] :database-is-auto-increment]
                [[:case-expr [:= :is_nullable [:inline "NO"]] [:inline true] [:inline false]]
                 :database-required]
-               [[:inline ""] :field-comment]]
+               ;; NULL, not "": FieldMetadataEntry requires field-comment to
+               ;; be a non-blank string or nil (enforced by malli in dev/test)
+               [[:inline nil] :field-comment]]
       :from [[:information_schema.columns]]
       :where (vec (cons :and where-clause))
       :order-by [:table_schema :table_name :ordinal_position]}
