@@ -16,7 +16,8 @@
    [metabase.test.data.interface :as tx]
    [metabase.test.data.sql :as sql.tx]
    [metabase.test.data.sql-jdbc :as sql-jdbc.tx]
-   [metabase.test.data.sql-jdbc.execute :as execute]))
+   [metabase.test.data.sql-jdbc.execute :as execute]
+   [metabase.test.data.sql-jdbc.load-data :as load-data]))
 
 (set! *warn-on-reflection* true)
 
@@ -76,6 +77,12 @@
 ;; ("Not implemented Error: No support for that ALTER TABLE option yet!"),
 ;; same situation as the SQLite test extensions -> skip FK DDL entirely.
 (defmethod sql.tx/add-fk-sql :arrow-flight-sql [& _] nil)
+
+;; DuckDB's INTEGER PRIMARY KEY does not auto-increment, so the generated
+;; INSERTs must carry explicit id values (the ClickHouse pattern).
+(defmethod load-data/row-xform :arrow-flight-sql
+  [_driver _dbdef tabledef]
+  (load-data/maybe-add-ids-xform tabledef))
 
 ;; DuckDB default ordering puts NULLs last for ascending sorts
 (defmethod tx/sorts-nil-first? :arrow-flight-sql [_ _] false)
