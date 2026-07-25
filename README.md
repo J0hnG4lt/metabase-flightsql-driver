@@ -114,6 +114,17 @@ podman-compose -f docker-compose.yaml -f docker-compose.tls.yaml up -d
 
 Adds `gizmosql-tls` (31338, CA-signed TLS) and `gizmosql-mtls` (31339, requires client certificates), and mounts `./tls` into Metabase at `/opt/flightsql-tls` so the driver's *Server CA certificate*, *mTLS client certificate/key* fields can reference the files.
 
+### Optional OAuth2 profile (Keycloak)
+
+```bash
+python scripts/generate_oauth_config.py    # deterministic RS256 signing key + Keycloak realm
+podman-compose -f docker-compose.yaml -f docker-compose.oauth.yaml up -d keycloak gizmosql-oauth
+```
+
+Adds Keycloak (host port 8180, realm `flightsql` with client-credentials clients minting `role=admin` and `role=readonly` tokens) and `gizmosql-oauth` (host port 31340; verifies JWT signature/issuer/audience). Connect from Metabase with Username `token` and the OAuth access token as Password — the readonly-role token is SELECT-only.
+
+> Note: GizmoSQL **Core** accepts external JWTs only via that handshake convention. The Arrow JDBC `oauth.*` client-credentials flow fetches and sends the token correctly, but Core's bearer-header path only accepts its own session tokens (external bearer headers are an Enterprise/JWKS capability — or use Dremio).
+
 ### Connecting to InfluxDB 3
 
 Enable the token toggle, paste the admin token (in `.env` as `INFLUXDB3_TOKEN` after seeding), and set **Additional options** to `database=<your-db>` (forwarded as a gRPC header). Tip: add a schema-filters *exclusion* for `system` to keep InfluxDB's internal tables out of sync.

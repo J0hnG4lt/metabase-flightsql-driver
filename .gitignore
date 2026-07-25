@@ -30,3 +30,6 @@ tls/
 # Python
 __pycache__/
 .pytest_cache/
+
+# Generated OAuth test-profile material
+oauth/
