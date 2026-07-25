@@ -7,19 +7,35 @@ on:
   workflow_dispatch:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Clojure + clj-kondo
+      uses: DeLaGuardo/setup-clojure@12.3
+      with:
+        cli: latest
+        clj-kondo: latest
+
+    - name: Lint driver source
+      run: clj-kondo --lint src
+
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # One build per supported Metabase release line. Keep in sync with the
+        # compatibility table in README.md. 62.x EOLs 2026-09-01.
+        metabase-ref: [ v0.62.5, v0.63.1 ]
 
     steps:
     - name: Clone Metabase repository
       uses: actions/checkout@v4
       with:
         repository: metabase/metabase
-        # Pin to the Metabase version the driver ships against. Building against
-        # an unpinned master breaks whenever upstream restructures modules/drivers
-        # (e.g. sqlite/druid were removed from modules/drivers after v0.62), which
-        # ci/deps.edn still references as :local/root siblings.
-        ref: v0.62.4
+        ref: ${{ matrix.metabase-ref }}
         path: metabase
 
     - name: Checkout driver code
@@ -27,20 +43,16 @@ jobs:
       with:
         path: metabase/modules/drivers/arrow-flight-sql
 
-    - name: List driver files for debugging
-      run: |
-        echo "Listing contents of metabase/modules/drivers/arrow-flight-sql:"
-        ls -R metabase/modules/drivers/
-        ls -R metabase/modules/drivers/arrow-flight-sql
-
-    - name: Register arrow-flight-sql in deps.edn
+    - name: Register arrow-flight-sql as the only driver module
       working-directory: ./metabase
+      # Overwriting with a single-entry map (the pattern the ClickHouse driver
+      # used) is robust across Metabase versions: building one driver does not
+      # need the in-tree driver modules registered, and upstream reshuffles of
+      # modules/drivers (sqlite moved to core, druid removed, ...) can no
+      # longer break us.
       run: |
-        cp modules/drivers/arrow-flight-sql/ci/deps.edn modules/drivers/deps.edn
-        echo "--- Verifying modules/drivers/deps.edn content ---"
+        echo '{:deps {metabase/arrow-flight-sql {:local/root "arrow-flight-sql"}}}' > modules/drivers/deps.edn
         cat modules/drivers/deps.edn
-        echo "----------------------------------------------------"
-
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -63,75 +75,86 @@ jobs:
       with:
         cli: latest
 
+    - name: Cache Maven + gitlibs
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.m2/repository
+          ~/.gitlibs
+        key: ${{ runner.os }}-driver-${{ matrix.metabase-ref }}-${{ hashFiles('metabase/modules/drivers/arrow-flight-sql/deps.edn', 'metabase/deps.edn') }}
+        restore-keys: |
+          ${{ runner.os }}-driver-${{ matrix.metabase-ref }}-
+
     - name: Build driver
       working-directory: ./metabase
       run: |
         chmod +x ./bin/build-driver.sh
         ./bin/build-driver.sh arrow-flight-sql
 
+    - name: Rename jar per Metabase line
+      run: |
+        MB_LINE=$(echo "${{ matrix.metabase-ref }}" | sed -E 's/^v0\.([0-9]+).*/mb\1/')
+        mkdir -p out
+        cp metabase/resources/modules/arrow-flight-sql.metabase-driver.jar \
+           "out/arrow-flight-sql.metabase-driver-${MB_LINE}.jar"
+        ls -la out/
+
     - name: Upload driver artifact
       uses: actions/upload-artifact@v4
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       with:
-        name: metabase-arrow-flight-sql-driver
-        path: metabase/resources/modules/arrow-flight-sql.metabase-driver.jar
+        name: metabase-arrow-flight-sql-driver-${{ matrix.metabase-ref }}
+        path: out/*.jar
         if-no-files-found: error
 
   release:
     runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: 
+    needs: [ lint, build ]
+    # Releases are cut deliberately (Actions tab -> Run workflow), not on
+    # every merge to main.
+    if: github.event_name == 'workflow_dispatch'
+    environment:
       name: release-approval
       url: https://github.com/${{ github.repository }}/releases/latest
-    
+
     steps:
     - name: Checkout driver code
       uses: actions/checkout@v4
 
-    - name: Download build artifact
+    - name: Download build artifacts
       uses: actions/download-artifact@v4
       with:
-        name: metabase-arrow-flight-sql-driver
+        pattern: metabase-arrow-flight-sql-driver-*
+        merge-multiple: true
         path: ./artifacts/
 
-    - name: Create release tag and upload artifact
+    - name: Create release tag and upload artifacts
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Fetch all tags
         git fetch --tags
-        
-        # Get the latest tag (assume semantic versioning)
+
         LATEST_TAG=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-        
+
         if [ -z "$LATEST_TAG" ]; then
-          # No existing tags, start with 0.0.1
           NEW_TAG="0.0.1"
         else
-          # Extract version parts
           IFS='.' read -ra VERSION_PARTS <<< "$LATEST_TAG"
           MAJOR=${VERSION_PARTS[0]}
           MINOR=${VERSION_PARTS[1]}
           PATCH=${VERSION_PARTS[2]}
-          
-          # Increment patch version
           PATCH=$((PATCH + 1))
           NEW_TAG="$MAJOR.$MINOR.$PATCH"
         fi
-        
-        # Configure git
+
         git config --global user.email "action@github.com"
         git config --global user.name "GitHub Action"
-        
-        # Create and push tag
+
         git tag $NEW_TAG
         git push origin $NEW_TAG
-        
+
         echo "Created tag: $NEW_TAG (previous: $LATEST_TAG)"
-        
-        # Create GitHub Release
+
         gh release create $NEW_TAG \
           --title "Release $NEW_TAG" \
-          --notes "Automated release $NEW_TAG" \
-          ./artifacts/arrow-flight-sql.metabase-driver.jar
+          --generate-notes \
+          ./artifacts/*.jar

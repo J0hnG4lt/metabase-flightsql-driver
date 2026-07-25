@@ -12,6 +12,16 @@ My main goal was to allow Metabase to use [Spice.ai OSS](https://spiceai.org/doc
 - Timestamp Conversion: Automatically converts TIMESTAMP columns to local date-time objects.
 - Field Filters: Full support for Metabase field filters including table aliases for JOIN queries.
 
+## Compatibility
+
+CI builds one jar per supported Metabase release line (see release assets):
+
+| Driver release | Metabase | Arrow Flight SQL JDBC |
+|---|---|---|
+| unreleased (main) | v0.62.5 (`-mb62` jar), v0.63.1 (`-mb63` jar) | 19.0.0 |
+| 0.0.9 | v0.62.4 | 18.2.0 |
+| 0.0.5 – 0.0.8 | v0.55 – v0.62 | 18.2.0 |
+
 ## Installation
 
 ### Prerequisites

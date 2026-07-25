@@ -14,7 +14,7 @@ pom.xml.asc
 node_modules
 
 .calva/
-.clj-kondo/
+.clj-kondo/.cache/
 .cpcache/
 .lsp/
 
