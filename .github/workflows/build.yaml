@@ -108,6 +108,79 @@ jobs:
         path: out/*.jar
         if-no-files-found: error
 
+  # Runs Metabase's own driver test harness (test extensions under test/)
+  # against a GizmoSQL service, scoped to the driver's test namespace (which
+  # loads the shared test-data dataset through the harness: DDL + INSERT over
+  # Flight SQL, sync, MBQL queries). Marked experimental so remaining dialect
+  # gaps don't block PRs while being burned down.
+  driver-test-suite:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      gizmosql:
+        image: gizmodata/gizmosql:v1.35.1
+        env:
+          TLS_ENABLED: "0"
+          GIZMOSQL_USERNAME: gizmosql
+          GIZMOSQL_PASSWORD: gizmosql_password
+          SECRET_KEY: ci-test-jwt-signing-key-0123456789abcdef
+          PRINT_QUERIES: "0"
+        ports:
+          - 31337:31337
+
+    steps:
+    - name: Clone Metabase repository
+      uses: actions/checkout@v4
+      with:
+        repository: metabase/metabase
+        ref: v0.62.5
+        path: metabase
+
+    - name: Checkout driver code
+      uses: actions/checkout@v4
+      with:
+        path: metabase/modules/drivers/arrow-flight-sql
+
+    - name: Register driver module and test path
+      working-directory: ./metabase
+      run: |
+        echo '{:deps {metabase/arrow-flight-sql {:local/root "arrow-flight-sql"}}}' > modules/drivers/deps.edn
+        # insert our test dir into the :drivers-dev :extra-paths vector
+        sed -i 's|"modules/drivers/athena/test"|"modules/drivers/arrow-flight-sql/test"\n    "modules/drivers/athena/test"|' deps.edn
+        grep -n "arrow-flight-sql/test" deps.edn
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '21'
+
+    - name: Set up Clojure
+      uses: DeLaGuardo/setup-clojure@12.3
+      with:
+        cli: latest
+
+    - name: Cache Maven + gitlibs
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.m2/repository
+          ~/.gitlibs
+        key: ${{ runner.os }}-driver-tests-v0.62.5-${{ hashFiles('metabase/deps.edn') }}
+        restore-keys: |
+          ${{ runner.os }}-driver-tests-v0.62.5-
+
+    - name: Run driver test namespace via the shared harness
+      working-directory: ./metabase
+      env:
+        DRIVERS: arrow-flight-sql
+        MB_ARROW_FLIGHT_SQL_TEST_HOST: localhost
+        MB_ARROW_FLIGHT_SQL_TEST_PORT: "31337"
+        MB_ARROW_FLIGHT_SQL_TEST_USER: gizmosql
+        MB_ARROW_FLIGHT_SQL_TEST_PASSWORD: gizmosql_password
+      run: |
+        clojure -X:dev:drivers:drivers-dev:test :only '[metabase.driver.arrow-flight-sql-test]'
+
   # Releases are created by release-please (merge its release PR on main);
   # this job then attaches the per-Metabase-line jars to that release.
   attach-release-assets:

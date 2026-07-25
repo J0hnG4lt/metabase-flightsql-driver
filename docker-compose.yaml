@@ -162,6 +162,19 @@ services:
     networks:
       - metanet1
 
+  # SMTP sink for testing alerts/subscriptions delivery (web UI + REST API
+  # on :1080, SMTP on :1025). Metabase email settings are configured by the
+  # e2e suite.
+  maildev:
+    image: maildev/maildev:2.2.1
+    container_name: maildev
+    hostname: maildev
+    ports:
+      - "1080:1080"
+      - "1025:1025"
+    networks:
+      - metanet1
+
 networks:
   metanet1:
     driver: bridge
