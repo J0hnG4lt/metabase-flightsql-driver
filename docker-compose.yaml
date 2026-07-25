@@ -14,7 +14,7 @@ services:
     restart: "no"
 
   metabase:
-    image: metabase/metabase:v0.62.4
+    image: metabase/metabase:v0.62.5
     container_name: metabase
     hostname: metabase
     depends_on:
@@ -65,7 +65,10 @@ services:
       - metanet1
 
   spiced:
-    image: spiceai/spiceai:1.10.2
+    # 2.x: models are bundled in the default image (bigger pull), spicepod
+    # version v2 is the default, and runtime.results_cache was renamed to
+    # runtime.caching.sql_results.
+    image: spiceai/spiceai:2.1.1
     container_name: spiced-container
     privileged: true
     # Note: removed 'user: root' as spiceai 1.10.2+ doesn't have root in passwd file
@@ -88,7 +91,9 @@ services:
       - metanet1
 
   gizmosql:
-    image: gizmodata/gizmosql:latest
+    # Pinned (releases are near-weekly); a -slim and an LTS channel
+    # (gizmodata/gizmosql-lts) also exist.
+    image: gizmodata/gizmosql:v1.35.1
     container_name: gizmosql
     hostname: gizmosql
     volumes:
@@ -99,6 +104,11 @@ services:
       TLS_ENABLED: "false"
       GIZMOSQL_USERNAME: "gizmosql"
       GIZMOSQL_PASSWORD: "gizmosql_password"
+      # Signs the session JWTs the server issues after basic auth. Without a
+      # stable value, every container restart invalidates the bearer tokens
+      # Metabase's pooled connections retained (retainAuth) -> auth errors
+      # until the pool cycles. Demo value; use a real secret in production.
+      SECRET_KEY: "flightsql-demo-jwt-signing-key-0123456789abcdef"
       PRINT_QUERIES: "1"
       DATABASE_FILENAME: ":memory:"
       INIT_SQL_COMMANDS_FILE: "/opt/gizmosql/init.sql"
