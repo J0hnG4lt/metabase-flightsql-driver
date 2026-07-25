@@ -150,33 +150,12 @@
        :cast arrow-flight-sql-cast-fn})))
 
 ;; ----------------------------------------------------------------
-;; Test the connection to the Arrow Flight SQL database.
-;; Executes a simple "SELECT 1" query to verify connectivity.
-(defmethod driver/can-connect? :arrow-flight-sql
-  [driver details]
-  (let [query-succeeded? (atom false)]
-    (try
-      (let [spec (sql-jdbc.conn/connection-details->spec driver details)]
-        (log/info "Testing connection with spec, attempting to get connection...")
-        (try
-          (with-open [conn (jdbc/get-connection spec)]
-            (log/info "Connection obtained, executing test query...")
-            (let [result (jdbc/query {:connection conn} ["SELECT 1"])]
-              (log/info "Test query successful:" result)
-              (reset! query-succeeded? true)
-              true))
-          (catch java.sql.SQLException e
-            ;; If the query succeeded but closing failed (known issue with Flight SQL + catalog param),
-            ;; treat as successful connection
-            (if @query-succeeded?
-              (do
-                (log/warn "Connection close failed but query succeeded, treating as success:" (.getMessage e))
-                true)
-              (throw e)))))
-      (catch Exception e
-        (log/error e "Flight SQL connection test failed.")
-        false))))
-
+;; NOTE: no driver/can-connect? override. The :sql-jdbc default runs the
+;; test query through the shared machinery, which also resolves secrets,
+;; SSH tunnels, and EE auth providers. The old override returned false when
+;; connection close threw a non-SQLException even though the test query had
+;; succeeded (issue #11); Arrow JDBC >= 19.0.0 suppresses those benign
+;; close-time gRPC exceptions at the source (apache/arrow-java GH-863).
 
 ;; ----------------------------------------------------------------
 ;; Map raw database types to Metabase base types.
