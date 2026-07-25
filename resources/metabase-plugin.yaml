@@ -50,15 +50,18 @@ driver:
       type: string
       required: false
 
+    # Secure by default, matching both the Arrow Flight SQL JDBC driver's own
+    # defaults and the :or defaults in connection-details->spec. Local demo
+    # servers without TLS need Use Encryption switched off explicitly.
     - name: useEncryption
       display-name: Use Encryption
       type: boolean
-      default: false
+      default: true
 
     - name: disableCertificateVerification
       display-name: Disable Certificate Verification
       type: boolean
-      default: true
+      default: false
 
     # Advanced section helpers are literal strings
     - advanced-options-start

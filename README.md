@@ -88,7 +88,8 @@ When setting up the connection in Metabase, the driver registers under the name 
 - **Password**: (Optional) – Password for authentication.
 - **Token**: (Optional) – A secure token for connection (used by Spice.ai).
 - **Catalog**: (Optional) - The name of the catalog to use.
-- **Use Encryption**: (Default: true) – Enable or disable connection encryption.
+- **Use Encryption**: (Default: true) – Enable or disable TLS. Switch off for local plaintext servers (the docker-compose demo does this explicitly).
+- **Disable Certificate Verification**: (Default: false) – Only enable for servers with self-signed certificates.
 
 ## Project Structure
 
