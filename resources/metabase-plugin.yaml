@@ -25,25 +25,63 @@ driver:
         - port
         - { placeholder: "443" }
 
-    # Username is custom (built-in is 'user'); that's fine
-    - name: username
-      display-name: Username (optional)
-      required: false
+    # ------------------------------------------------------------------
+    # Authentication. One dropdown selects the mode; fields below are
+    # shown conditionally (visible-if), following the same pattern the
+    # built-in Databricks (use-m2m) and Snowflake (use-password) drivers use.
+    #
+    # Mode -> JDBC mapping (see connection-details->spec):
+    #   user-password -> user=...&password=...   (Flight handshake basic auth;
+    #                    for Spice.ai API keys leave Username empty and put
+    #                    the key in Password)
+    #   token         -> authorization=Bearer <token>  (InfluxDB 3 tokens,
+    #                    Dremio PATs, any pre-issued bearer token)
+    #   jwt           -> user=token&password=<JWT>     (GizmoSQL external JWT)
+    #   none          -> anonymous (ROAPI, kamu, default Spice.ai, Ballista)
+    - name: auth-method
+      display-name: Authentication method
+      type: select
+      options:
+        - name: Username and password
+          value: user-password
+        - name: Bearer token / PAT / API key
+          value: token
+        - name: External JWT (GizmoSQL-style)
+          value: jwt
+        - name: None (anonymous)
+          value: none
+      default: user-password
 
-    # Built-in password; just make it optional in UI
+    - name: username
+      display-name: Username
+      required: false
+      visible-if:
+        auth-method: user-password
+
     - merge:
         - password
-        - { display-name: "Password (optional)", required: false }
+        - display-name: Password
+          required: false
+          visible-if:
+            auth-method: user-password
 
-    # Token is a NEW field (do not use merge here).
-    # secret-kind makes the UI render/store it as a masked secret value
-    # (details keys become token-value / token-id — resolved in the driver
-    # via driver-api/secret-value-as-string).
+    # Secret-typed fields are stored as <name>-value / <name>-id in details
+    # and resolved in the driver via driver-api/secret-value-as-string.
     - name: token
-      display-name: Token (optional)
+      display-name: Bearer token
       type: secret
       secret-kind: password
       required: false
+      visible-if:
+        auth-method: token
+
+    - name: jwt
+      display-name: JWT
+      type: secret
+      secret-kind: password
+      required: false
+      visible-if:
+        auth-method: jwt
 
     - name: catalog
       display-name: Catalog (optional)
@@ -65,9 +103,40 @@ driver:
 
     # Advanced section helpers are literal strings
     - advanced-options-start
+
+    # mTLS / custom CA. Stored as secrets; materialized to files and passed
+    # to the JDBC driver as tlsRootCerts / clientCertificate / clientKey.
+    - name: tls-root-certs
+      display-name: Server CA certificate (PEM)
+      type: secret
+      secret-kind: pem-cert
+      required: false
+
+    - name: client-cert
+      display-name: mTLS client certificate (PEM)
+      type: secret
+      secret-kind: pem-cert
+      required: false
+
+    - name: client-key
+      display-name: mTLS client key (PEM)
+      type: secret
+      secret-kind: pem-cert
+      required: false
+
+    - name: connect-timeout-millis
+      display-name: Connect timeout (ms)
+      type: integer
+      required: false
+
+    # Free-form URL parameters appended to the JDBC URL. Doubles as the
+    # escape hatch for oauth.* properties (OAuth2 client_credentials /
+    # token_exchange, Arrow JDBC >= 19.0.0), retainCookies/retainAuth, and
+    # custom gRPC headers (any unknown parameter is forwarded as a header,
+    # e.g. database=<db> for InfluxDB 3).
     - merge:
         - additional-options
-        - { placeholder: "threadPoolSize=1" }
+        - { placeholder: "threadPoolSize=1&retainAuth=true" }
     - default-advanced-options
 
 init:

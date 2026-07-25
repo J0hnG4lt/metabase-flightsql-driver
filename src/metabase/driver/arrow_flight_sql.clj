@@ -108,14 +108,6 @@
     supported?))
 
 ;; ----------------------------------------------------------------
-;; Helper function that returns the string if it is non-blank;
-;; otherwise, it returns the provided default value.
-(defn non-blank [s default]
-  (if (and (string? s) (not (str/blank? s)))
-    s
-    default))
-
-;; ----------------------------------------------------------------
 ;; Build a connection spec from the provided database details.
 ;; This constructs a JDBC connection specification map for Arrow Flight SQL.
 ;; ----------------------------------------------------------------
@@ -134,33 +126,85 @@
                      :else val)
     val))
 
+(defn- non-blank-str [s]
+  (when (and (string? s) (not (str/blank? s)))
+    s))
+
+(defn- secret-string
+  "Resolve a secret-typed connection property (stored by the UI as
+  <prop>-value / <prop>-id) with a fallback to a plain key of the same name
+  for connections created directly via the REST API."
+  [driver details prop]
+  (or (driver-api/secret-value-as-string driver details prop)
+      (non-blank-str (get details (keyword prop)))))
+
+(defn- secret-file-path
+  "Materialize a secret-typed connection property to a file on disk and return
+  its absolute path (the Arrow JDBC driver wants file paths for TLS material)."
+  [driver details prop]
+  (try
+    (some-> (driver-api/secret-value-as-file! driver details prop) str non-blank-str)
+    (catch Throwable e
+      (log/warnf e "Could not resolve secret property %s as a file" prop)
+      nil)))
+
+(defn- auth-query-params
+  "Query-string fragments for the selected authentication method.
+
+  Modes (see metabase-plugin.yaml for the matching UI fields):
+    :user-password  Flight handshake basic auth. A blank username with a
+                    password is emitted as user=&password=<pw> — the Spice.ai
+                    API-key convention.
+    :token          authorization=Bearer <token> (InfluxDB 3 tokens, Dremio
+                    PATs, any pre-issued bearer/API token).
+    :jwt            GizmoSQL-style external JWT: literal user \"token\" with
+                    the JWT as password.
+    :none           anonymous.
+
+  Connections created before the auth-method dropdown existed carry no
+  :auth-method key; the mode is inferred from which credentials are present."
+  [driver {:keys [auth-method username user password] :as details}]
+  (let [username* (or (non-blank-str username) (non-blank-str user))
+        password* (non-blank-str password)
+        token*    (secret-string driver details "token")
+        jwt*      (secret-string driver details "jwt")
+        method    (or (some-> (non-blank-str auth-method) keyword)
+                      (cond
+                        token*    :token
+                        password* :user-password
+                        :else     :none))]
+    (case method
+      :user-password (cond
+                       (and username* password*)
+                       [(str "user=" (codec/url-encode username*))
+                        (str "password=" (codec/url-encode password*))]
+
+                       password*
+                       ["user=" (str "password=" (codec/url-encode password*))]
+
+                       :else [])
+      :token         (if token*
+                       [(str "authorization=Bearer%20" (codec/url-encode token*))]
+                       [])
+      :jwt           (if jwt*
+                       ["user=token" (str "password=" (codec/url-encode jwt*))]
+                       [])
+      :none          []
+      [])))
+
 (defmethod sql-jdbc.conn/connection-details->spec :arrow-flight-sql
   [driver details]
-  (let [{:keys [host port token username user password catalog useEncryption disableCertificateVerification]
+  (let [{:keys [host port useEncryption disableCertificateVerification]
          :or   {useEncryption true
                 disableCertificateVerification false}} details
-        ;; prefer :username (manifest) but fall back to :user
-        username* (or (when (and (string? username) (not (str/blank? username))) username)
-                      (when (and (string? user)      (not (str/blank? user)))      user))
 
-        ;; `token` is a secret-typed property: connections created through the
-        ;; admin UI store it as token-value / token-id, never as :token, so it
-        ;; must be resolved through the secrets API. Fall back to plain :token
-        ;; for connections created directly via the REST API.
-        token*    (or (driver-api/secret-value-as-string driver details "token")
-                      (when (and (string? token) (not (str/blank? token))) token))
+        ;; TLS material is secret-typed; the JDBC driver takes file paths.
+        root-certs-path  (secret-file-path driver details "tls-root-certs")
+        client-cert-path (secret-file-path driver details "client-cert")
+        client-key-path  (secret-file-path driver details "client-key")
 
-        ;; URL-encode only provided creds
-        enc-token (when (and (string? token*)    (not (str/blank? token*)))    (codec/url-encode token*))
-        enc-user  (when (and (string? username*) (not (str/blank? username*))) (codec/url-encode username*))
-        enc-pass  (when (and (string? password)  (not (str/blank? password)))  (codec/url-encode password))
-
-        ;; Choose exactly ONE auth mode: token wins over user/pass
-        auth-qps  (cond
-                    enc-token               [(str "authorization=Bearer%20" enc-token)]
-                    (and enc-user enc-pass) [(str "user=" enc-user)
-                                             (str "password=" enc-pass)]
-                    :else                   [])
+        connect-timeout  (some-> (:connect-timeout-millis details) str non-blank-str)
+        additional-opts  (non-blank-str (:additional-options details))
 
         ;; Build query params
         ;; NOTE: We intentionally do NOT include catalog in the JDBC URL.
@@ -168,18 +212,25 @@
         ;; but many Flight SQL servers (e.g., GizmoSQL/DuckDB) don't implement this RPC.
         ;; Instead, we use the catalog value only for filtering during schema sync
         ;; (see describe-database and describe-fields-sql methods).
-        params    (cond-> []
-                    true (into auth-qps)
+        params    (cond-> (vec (auth-query-params driver details))
                     true (conj (str "useEncryption=" (boolean useEncryption)))
-                    true (conj (str "disableCertificateVerification=" (boolean disableCertificateVerification))))
+                    true (conj (str "disableCertificateVerification=" (boolean disableCertificateVerification)))
+                    root-certs-path  (conj (str "tlsRootCerts=" (codec/url-encode root-certs-path)))
+                    (and client-cert-path client-key-path)
+                    (into [(str "clientCertificate=" (codec/url-encode client-cert-path))
+                           (str "clientKey=" (codec/url-encode client-key-path))])
+                    connect-timeout  (conj (str "connectTimeoutMillis=" connect-timeout))
+                    ;; free-form passthrough: threadPoolSize, retainAuth/retainCookies,
+                    ;; oauth.* (Arrow JDBC >= 19.0.0), or custom gRPC headers
+                    additional-opts  (conj additional-opts))
         qp        (str/join "&" params)
 
-        ;; Full JDBC URL
-        full-url  (str "jdbc:arrow-flight-sql://"
+        base-url  (str "jdbc:arrow-flight-sql://"
                        (or host "localhost") ":"
-                       (or port 443)
-                       (when-not (str/blank? qp) (str "?" qp)))]
-        (log/debug "Arrow Flight SQL connection URL:" full-url)
+                       (or port 443))
+        full-url  (str base-url (when-not (str/blank? qp) (str "?" qp)))]
+    ;; never log the query string — it carries credentials
+    (log/debug "Arrow Flight SQL connection URL (params redacted):" base-url)
     (let [scheme  "jdbc:arrow-flight-sql:"
           subname (subs full-url (count scheme))]
       {:classname   "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver"

@@ -84,10 +84,13 @@ When setting up the connection in Metabase, the driver registers under the name 
 
 - **Host**: (Default: localhost) – The server's hostname or IP address.
 - **Port**: (Default: 443) – The port to use for the connection.
-- **User**: (Optional) – Username for authentication.
-- **Password**: (Optional) – Password for authentication.
-- **Token**: (Optional) – A secure token for connection (used by Spice.ai).
+- **Authentication method** – one of:
+  - *Username and password* – Flight handshake basic auth (GizmoSQL, Dremio, Doris, StarRocks, Denodo…). For **Spice.ai API keys**, leave Username empty and put the key in Password.
+  - *Bearer token / PAT / API key* – sent as `Authorization: Bearer …` (InfluxDB 3 tokens, Dremio PATs, pre-issued JWTs).
+  - *External JWT (GizmoSQL-style)* – connects as user `token` with the JWT as password.
+  - *None (anonymous)* – ROAPI, kamu, Ballista, Spice.ai without auth.
 - **Catalog**: (Optional) - The name of the catalog to use.
+- **Advanced**: server CA certificate, mTLS client certificate/key (PEM secrets), connect timeout, and free-form additional JDBC options (`threadPoolSize`, `retainAuth`, `oauth.*` for OAuth 2.0 client-credentials/token-exchange, or any custom parameter — unknown parameters are forwarded to the server as gRPC headers, e.g. `database=<db>` for InfluxDB 3).
 - **Use Encryption**: (Default: true) – Enable or disable TLS. Switch off for local plaintext servers (the docker-compose demo does this explicitly).
 - **Disable Certificate Verification**: (Default: false) – Only enable for servers with self-signed certificates.
 
