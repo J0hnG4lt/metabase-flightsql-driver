@@ -72,6 +72,11 @@
 (defmethod execute/execute-sql! :arrow-flight-sql [& args]
   (apply execute/sequentially-execute-sql! args))
 
+;; DuckDB has no ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY support
+;; ("Not implemented Error: No support for that ALTER TABLE option yet!"),
+;; same situation as the SQLite test extensions -> skip FK DDL entirely.
+(defmethod sql.tx/add-fk-sql :arrow-flight-sql [& _] nil)
+
 ;; DuckDB default ordering puts NULLs last for ascending sorts
 (defmethod tx/sorts-nil-first? :arrow-flight-sql [_ _] false)
 

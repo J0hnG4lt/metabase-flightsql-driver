@@ -38,6 +38,14 @@
    ))
 
 ;; ----------------------------------------------------------------
+;; In production the plugin manifest registers the (lazy-loading) driver
+;; before this namespace loads, but Metabase's dev/test harness loads driver
+;; namespaces directly and expects them to self-register — the same
+;; unconditional call every in-tree module driver makes (re-registration is
+;; idempotent).
+(driver/register! :arrow-flight-sql :parent :sql-jdbc)
+
+;; ----------------------------------------------------------------
 ;; Define the display name for the Arrow Flight SQL driver.
 (defmethod driver/display-name :arrow-flight-sql [_]
   "Arrow Flight SQL")

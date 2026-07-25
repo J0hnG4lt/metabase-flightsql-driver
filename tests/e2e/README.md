@@ -26,5 +26,8 @@ python -m pytest tests/e2e -v
 | `test_features.py` | every dashboard card (11 visual types), sync_schema/rescan_values, MBQL temporal breakout + relative filters, segments, v2 metrics, pivot |
 | `test_tls.py` | TLS skip-verify, CA validation via tlsRootCerts, mTLS client certs, strict-mode negatives (auto-skips without the TLS profile) |
 | `test_new_backends.py` | anonymous auth (spiced-anon), InfluxDB 3 bearer + `database` header + sync + negative (auto-skips when not running) |
+| `test_operations.py` | query caching (cached flag on repeat run), x-ray dashboard generation, rows-alert email delivery via maildev (auto-skips without maildev) |
+
+There is also a Clojure test layer under the repo-root `test/` directory: pure unit tests for the connection spec builder plus Metabase's shared driver harness (test extensions) — run by the `driver-test-suite` CI job, or locally from a Metabase checkout with `DRIVERS=arrow-flight-sql clojure -X:dev:drivers:drivers-dev:test :only '[metabase.driver.arrow-flight-sql-test]'`.
 
 Known gap (needs a server we don't run locally): OAuth2 `oauth.*` flows — Dremio-class; see the backend matrix in the main README.
