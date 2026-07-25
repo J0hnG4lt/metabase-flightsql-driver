@@ -29,6 +29,8 @@
    [metabase.driver.sql.query-processor :as sql.qp]
    ;; Schema synchronization for SQL-JDBC drivers.
    [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
+   ;; Schema inclusion/exclusion patterns from the schema-filters property.
+   [metabase.driver.sync :as driver.s]
    ;; SQL execution helper functions.
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
    [metabase.util.honey-sql-2        :as h2x] 
@@ -318,57 +320,65 @@
       (log/debug "Ignoring connection close error (known Flight SQL issue with catalog param):" (.getMessage e)))))
 
 
+;; System schemas that are never interesting to sync, regardless of user
+;; schema filters. Consulted by our describe-database implementation.
+(defmethod sql-jdbc.sync/excluded-schemas :arrow-flight-sql
+  [_driver]
+  #{"information_schema" "runtime" "pg_catalog"})
+
 ;; List tables by querying information_schema.tables.
 ;; When a catalog is specified in connection details, we filter by table_catalog.
 ;; Catalog hierarchy: Catalog → Schema → Table
+;; User include/exclude patterns from the schema-filters connection property
+;; are honored via driver.s/include-schema?.
 (defmethod driver/describe-database :arrow-flight-sql
   [driver database]
-  (let [spec (sql-jdbc.conn/connection-details->spec :arrow-flight-sql (:details database))
-        catalog (get-in database [:details :catalog])
-        use-catalog? (and (string? catalog) (not (str/blank? catalog)))
-        ;; Filter by table_catalog when specified
-        query (if use-catalog?
-                (format "SELECT table_name, table_schema FROM information_schema.tables WHERE LOWER(table_catalog) = LOWER('%s')" catalog)
-                "SELECT table_name, table_schema FROM information_schema.tables")
-        conn (jdbc/get-connection spec)]
+  (let [spec     (sql-jdbc.conn/connection-details->spec driver (:details database))
+        catalog  (non-blank-str (get-in database [:details :catalog]))
+        sql+args (if catalog
+                   ["SELECT table_name, table_schema FROM information_schema.tables WHERE LOWER(table_catalog) = LOWER(?)"
+                    catalog]
+                   ["SELECT table_name, table_schema FROM information_schema.tables"])
+        excluded (sql-jdbc.sync/excluded-schemas driver)
+        conn     (jdbc/get-connection spec)]
     (try
-      (let [rows (jdbc/query {:connection conn}
-                             [query]
-                             {:identifiers str/lower-case})
-            ;; Filter out system schemas
-            formatted (->> rows
-                           (filter #(not (contains? #{"information_schema" "runtime" "pg_catalog"}
-                                                    (str/lower-case (or (:table_schema %) "")))))
-                           (map (fn [row]
-                                  {:name   (:table_name row)
-                                   :schema (:table_schema row)})))]
-        {:tables (into #{} formatted)})
+      (let [rows   (jdbc/query {:connection conn} sql+args {:identifiers str/lower-case})
+            tables (keep (fn [{:keys [table_name table_schema]}]
+                           (when (and (not (contains? excluded (str/lower-case (or table_schema ""))))
+                                      (driver.s/include-schema? database table_schema))
+                             {:name   table_name
+                              :schema table_schema}))
+                         rows)]
+        {:tables (into #{} tables)})
       (finally
         (safely-close-connection conn)))))
 
 ;; ----------------------------------------------------------------
-;; Describe a specific table by executing a DESCRIBE query.
+;; Describe a single table via information_schema.columns. This is mostly a
+;; fallback path (sync uses the bulk describe-fields because :describe-fields
+;; is true); it deliberately avoids DuckDB's DESCRIBE statement so it works on
+;; any Flight SQL server exposing information_schema.
 (defmethod driver/describe-table :arrow-flight-sql
   [driver database {:keys [name schema]}]
   (let [spec (sql-jdbc.conn/connection-details->spec driver (:details database))
         conn (jdbc/get-connection spec)]
     (try
-      (let [query   (format "DESCRIBE \"%s\".\"%s\"" schema name) ;; Build the DESCRIBE query using schema and table name
-            results (jdbc/query {:connection conn} [query] {:identifiers str/lower-case})
-            fields  (mapv (fn [{:keys [column_name data_type is_nullable]}]
-                            (let [normalized-name (-> column_name
-                                                      (str/replace #"^\"|\"$" "")
-                                                      str/lower-case)]
-                              {:name          normalized-name
-                               :database-type data_type
-                               :base-type     (sql-jdbc.sync/database-type->base-type driver data_type)
-                               :nullable      (= "yes" (str/lower-case is_nullable))
-                               :field-comment ""}))   ;; Default comment placeholder for each field
+      (let [results (jdbc/query {:connection conn}
+                                [(str "SELECT column_name, data_type, is_nullable, ordinal_position"
+                                      " FROM information_schema.columns"
+                                      " WHERE LOWER(table_schema) = LOWER(?) AND LOWER(table_name) = LOWER(?)"
+                                      " ORDER BY ordinal_position")
+                                 schema name]
+                                {:identifiers str/lower-case})
+            fields  (into #{}
+                          (map-indexed
+                           (fn [idx {:keys [column_name data_type]}]
+                             {:name              column_name
+                              :database-type     data_type
+                              :base-type         (sql-jdbc.sync/database-type->base-type driver data_type)
+                              :database-position idx}))
                           results)]
-        (log/info "DESCRIBE query:" query)
-        (log/info "DESCRIBE raw results:" results)
-        (log/info "Parsed fields:" fields)
-        {:name name
+        {:name   name
          :schema schema
          :fields fields})
       (finally

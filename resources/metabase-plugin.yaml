@@ -88,6 +88,12 @@ driver:
       type: string
       required: false
 
+    # Standard include/exclude schema patterns (comma-separated, * wildcards);
+    # honored during table discovery in describe-database.
+    - name: schema-filters
+      type: schema-filters
+      display-name: Schemas
+
     # Secure by default, matching both the Arrow Flight SQL JDBC driver's own
     # defaults and the :or defaults in connection-details->spec. Local demo
     # servers without TLS need Use Encryption switched off explicitly.
