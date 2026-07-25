@@ -17,6 +17,8 @@
    [ring.util.codec :as codec]
    ;; Core Metabase driver functionality.
    [metabase.driver :as driver]
+   ;; Sanctioned facade over Metabase internals (secrets, QP helpers, ...).
+   [metabase.driver-api.core :as driver-api]
    ;; SQL generation and manipulation.
    [honey.sql :as sql]
    ;; Connection management for SQL-JDBC drivers.
@@ -103,7 +105,7 @@
     val))
 
 (defmethod sql-jdbc.conn/connection-details->spec :arrow-flight-sql
-  [_ details]
+  [driver details]
   (let [{:keys [host port token username user password catalog useEncryption disableCertificateVerification]
          :or   {useEncryption true
                 disableCertificateVerification false}} details
@@ -111,8 +113,15 @@
         username* (or (when (and (string? username) (not (str/blank? username))) username)
                       (when (and (string? user)      (not (str/blank? user)))      user))
 
+        ;; `token` is a secret-typed property: connections created through the
+        ;; admin UI store it as token-value / token-id, never as :token, so it
+        ;; must be resolved through the secrets API. Fall back to plain :token
+        ;; for connections created directly via the REST API.
+        token*    (or (driver-api/secret-value-as-string driver details "token")
+                      (when (and (string? token) (not (str/blank? token))) token))
+
         ;; URL-encode only provided creds
-        enc-token (when (and (string? token)     (not (str/blank? token)))     (codec/url-encode token))
+        enc-token (when (and (string? token*)    (not (str/blank? token*)))    (codec/url-encode token*))
         enc-user  (when (and (string? username*) (not (str/blank? username*))) (codec/url-encode username*))
         enc-pass  (when (and (string? password)  (not (str/blank? password)))  (codec/url-encode password))
 

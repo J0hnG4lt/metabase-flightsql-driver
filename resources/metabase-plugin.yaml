@@ -35,10 +35,14 @@ driver:
         - password
         - { display-name: "Password (optional)", required: false }
 
-    # Token is a NEW field (do not use merge here)
+    # Token is a NEW field (do not use merge here).
+    # secret-kind makes the UI render/store it as a masked secret value
+    # (details keys become token-value / token-id — resolved in the driver
+    # via driver-api/secret-value-as-string).
     - name: token
       display-name: Token (optional)
       type: secret
+      secret-kind: password
       required: false
 
     - name: catalog
