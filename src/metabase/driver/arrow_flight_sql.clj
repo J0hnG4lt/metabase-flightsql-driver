@@ -462,11 +462,29 @@
   [_]
   :monday)
 
-(defmethod sql.qp/->honeysql
-  ;; inline the two-arg ["absolute-datetime" value _] form
-  [:arrow-flight-sql :absolute-datetime]
-  [_driver [_ value _options]]
-  ;; value is a java.time.LocalDate or LocalDateTime
-  (let [fmt (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss")]
-    ;; embed as raw string literal
-    [:raw (str "'" (.format value fmt) "'")]))
+;; ----------------------------------------------------------------
+;; Inline absolute datetime values as typed SQL literals. Prepared-statement
+;; temporal parameters are not reliably supported across Flight SQL servers,
+;; so literals are safer for filters. The previous implementation formatted
+;; every value with a "yyyy-MM-dd HH:mm:ss" pattern, which throws
+;; UnsupportedTemporalTypeException for date-only (LocalDate) values.
+(def ^:private ^java.time.format.DateTimeFormatter timestamp-literal-formatter
+  (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))
+
+(def ^:private ^java.time.format.DateTimeFormatter time-literal-formatter
+  (java.time.format.DateTimeFormatter/ofPattern "HH:mm:ss"))
+
+(defmethod sql.qp/->honeysql [:arrow-flight-sql :absolute-datetime]
+  [_driver [_ value _unit]]
+  (condp instance? value
+    LocalDate      [:raw (format "DATE '%s'" value)]
+    LocalTime      [:raw (format "TIME '%s'" (.format ^LocalTime value time-literal-formatter))]
+    LocalDateTime  [:raw (format "TIMESTAMP '%s'" (.format ^LocalDateTime value timestamp-literal-formatter))]
+    ;; keep the wall-clock time, matching the previous behavior and the
+    ;; TIMESTAMP-without-timezone storage of the demo backends
+    OffsetDateTime [:raw (format "TIMESTAMP '%s'"
+                                 (.format (.toLocalDateTime ^OffsetDateTime value)
+                                          timestamp-literal-formatter))]
+    ;; anything else: let the value flow through as a JDBC parameter
+    ;; (set-parameter impls above cover the common temporal classes)
+    value))
