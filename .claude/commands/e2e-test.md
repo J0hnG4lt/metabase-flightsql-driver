@@ -122,7 +122,16 @@ print('Status:', res.get('status'), '| Rows:', len(res.get('data',{}).get('rows'
 `SELECT COUNT(*) FROM sales.orders WHERE status='Delivered'` returns 6; a
 JOIN/aggregate card returns fewer rows than that).
 
-### 7. Verify connection pool health
+### 7. Run the pytest suite (preferred, covers everything below and more)
+
+```bash
+python -m pytest tests/e2e -v
+```
+
+Optional stacks widen coverage (TLS/mTLS, InfluxDB 3, anonymous) — see
+`tests/e2e/README.md`. Modules auto-skip when their stack isn't running.
+
+### 8. Verify connection pool health
 
 ```bash
 podman logs metabase 2>&1 | grep -i "hash.*changed" | tail -5

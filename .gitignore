@@ -23,3 +23,6 @@ node_modules
 
 # Claude Code local (per-developer) settings
 .claude/settings.local.json
+
+# Generated TLS material for the tls profile
+tls/

@@ -99,9 +99,24 @@ The docker-compose file also contains a builder service, so don't worry if you h
 |---------|------|-------------|
 | metabase | 3000 | Metabase BI tool |
 | postgres | 5432 | Metabase application database |
-| spiced | 50051, 8090, 9090 | Spice.ai Flight SQL server |
+| spiced | 50051, 8090, 9090 | Spice.ai Flight SQL server (API-key auth) |
+| spiced-anon | 50052 | Spice.ai without auth (anonymous-connection testing) |
 | gizmosql | 31337 | GizmoSQL Flight SQL server (DuckDB-based) |
+| influxdb3 | 8181 | InfluxDB 3 Core (bearer-token-only; seed via `scripts/setup_influxdb3.py`) |
 | builder | - | Builds the driver JAR |
+
+### Optional TLS/mTLS profile
+
+```bash
+./scripts/generate_tls_certs.sh    # local CA + server cert + mTLS client cert into ./tls/
+podman-compose -f docker-compose.yaml -f docker-compose.tls.yaml up -d
+```
+
+Adds `gizmosql-tls` (31338, CA-signed TLS) and `gizmosql-mtls` (31339, requires client certificates), and mounts `./tls` into Metabase at `/opt/flightsql-tls` so the driver's *Server CA certificate*, *mTLS client certificate/key* fields can reference the files.
+
+### Connecting to InfluxDB 3
+
+Enable the token toggle, paste the admin token (in `.env` as `INFLUXDB3_TOKEN` after seeding), and set **Additional options** to `database=<your-db>` (forwarded as a gRPC header). Tip: add a schema-filters *exclusion* for `system` to keep InfluxDB's internal tables out of sync.
 
 ## Configuration
 
@@ -150,7 +165,12 @@ podman compose up -d
 
 # Wait for Metabase, then run setup
 python scripts/metabase_setup.py
+
+# Run the pytest e2e suite (see tests/e2e/README.md for optional stacks)
+python -m pytest tests/e2e -v
 ```
+
+The suite covers connections/auth shapes, the full connector option matrix, every dashboard card across 11 visualization types, metadata refreshes, MBQL/segments/metrics/pivot, TLS/mTLS, anonymous auth, and InfluxDB 3 (modules auto-skip when their optional stack isn't running).
 
 The setup script creates a test dashboard with:
 - **32 cards** with various chart types (scalar, bar, pie, line, area, table, gauge, funnel, scatter, progress)

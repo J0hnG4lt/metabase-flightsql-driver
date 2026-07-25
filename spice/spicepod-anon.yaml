@@ -1,0 +1,10 @@
+version: v2
+kind: Spicepod
+name: file_recipe_anonymous
+# No runtime.auth block: this instance accepts anonymous Flight SQL
+# connections — used to test the driver's no-credentials path positively.
+datasets:
+  - name: yellow_taxis
+    from: file://data/yellow_tripdata_2024-01.parquet
+    params:
+      file_format: parquet

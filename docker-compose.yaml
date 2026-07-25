@@ -90,6 +90,51 @@ services:
     networks:
       - metanet1
 
+  # Same Spice image without api-key auth: positive test target for the
+  # driver's anonymous (no credentials) connection path.
+  spiced-anon:
+    image: spiceai/spiceai:2.1.1
+    container_name: spiced-anon
+    hostname: spiced-anon
+    privileged: true
+    tmpfs:
+      - /spice_sandbox
+    volumes:
+      - type: bind
+        source: ./spice/spicepod-anon.yaml
+        target: /app/spicepod.yaml
+      - type: bind
+        source: ./data
+        target: /app/data
+    command: "--http 0.0.0.0:8090 --metrics 0.0.0.0:9090 --flight 0.0.0.0:50051"
+    ports:
+      - "50052:50051"
+    networks:
+      - metanet1
+
+  # InfluxDB 3 Core: bearer-token-only Flight SQL on port 8181 (HTTP + gRPC
+  # share the port). Database selection travels as a `database` gRPC header,
+  # which the driver passes through via additional-options. Read-only from
+  # Metabase's perspective (writes use line protocol over HTTP).
+  # Seed with: python scripts/setup_influxdb3.py  (creates admin token ->
+  # .env INFLUXDB3_TOKEN, writes sample data into the `demo` database).
+  influxdb3:
+    image: influxdb:3-core
+    container_name: influxdb3
+    hostname: influxdb3
+    command:
+      - influxdb3
+      - serve
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+    volumes:
+      - influxdb3-data:/var/lib/influxdb3/data
+    ports:
+      - "8181:8181"
+    networks:
+      - metanet1
+
   gizmosql:
     # Pinned (releases are near-weekly); a -slim and an LTS channel
     # (gizmodata/gizmosql-lts) also exist.
@@ -124,3 +169,4 @@ networks:
 volumes:
   pgdata:
   jar-volume:
+  influxdb3-data:

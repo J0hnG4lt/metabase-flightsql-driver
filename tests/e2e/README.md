@@ -1,0 +1,30 @@
+# Driver e2e suite
+
+API-level end-to-end tests against the compose stack. Stdlib + pytest only.
+
+```bash
+# 1. Base stack + setup (writes METABASE_API_KEY to .env)
+podman-compose up -d          # (pip podman-compose on Windows; see main README)
+python scripts/metabase_setup.py
+
+# 2. Optional: TLS/mTLS profile
+./scripts/generate_tls_certs.sh
+podman-compose -f docker-compose.yaml -f docker-compose.tls.yaml up -d
+
+# 3. Optional: seed InfluxDB 3 (token -> .env)
+python scripts/setup_influxdb3.py
+
+# 4. Run
+python -m pytest tests/e2e -v
+```
+
+| Module | Covers |
+|---|---|
+| `test_core.py` | connections, dashboard shape, native queries, UI-vs-legacy token storage shapes, dashboard-parameter filtered query |
+| `test_config_matrix.py` | catalog scoping, schema-filters, API-key-as-password, connect timeout, additional-options, anonymous-vs-api-key negative, toggle precedence |
+| `test_auth_manifest.py` | manifest field expansion (types, visible-if, advanced gating), normalize-db-details backfill |
+| `test_features.py` | every dashboard card (11 visual types), sync_schema/rescan_values, MBQL temporal breakout + relative filters, segments, v2 metrics, pivot |
+| `test_tls.py` | TLS skip-verify, CA validation via tlsRootCerts, mTLS client certs, strict-mode negatives (auto-skips without the TLS profile) |
+| `test_new_backends.py` | anonymous auth (spiced-anon), InfluxDB 3 bearer + `database` header + sync + negative (auto-skips when not running) |
+
+Known gap (needs a server we don't run locally): OAuth2 `oauth.*` flows — Dremio-class; see the backend matrix in the main README.
