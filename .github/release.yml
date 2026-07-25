@@ -1,0 +1,27 @@
+# Categorizes GitHub's auto-generated release notes (used by
+# `gh release create --generate-notes` and the release-please releases).
+# Label PRs accordingly; unlabeled PRs land in "Other changes".
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: ⚠️ Breaking changes
+      labels:
+        - breaking
+    - title: 🚀 Features
+      labels:
+        - enhancement
+        - feature
+    - title: 🐛 Fixes
+      labels:
+        - bug
+        - fix
+    - title: 🧰 CI & maintenance
+      labels:
+        - ci
+        - chore
+        - dependencies
+    - title: Other changes
+      labels:
+        - "*"

@@ -1,0 +1,24 @@
+name: release-please
+
+# Automates releases from Conventional Commits on main:
+# 1. Maintains a running "release PR" that accumulates changelog entries and
+#    the next semver (feat -> minor, fix -> patch, feat!/BREAKING CHANGE -> major).
+# 2. Merging that PR creates the git tag + GitHub release with the changelog.
+# 3. The build workflow (build.yaml) reacts to the published release and
+#    attaches the per-Metabase-line driver jars as release assets.
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
