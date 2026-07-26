@@ -30,6 +30,7 @@ python -m pytest tests/e2e -v
 | `test_uploads.py` | CSV upload → typed table + model → query → append-csv round trip on GizmoSQL; per-connection feature gating; clean 422 on read-only backends |
 | `test_transforms.py` | Data Studio `:transforms/table` — CTAS transform runs and creates the output table on GizmoSQL; read-only backends don't advertise it |
 | `test_catalog_schema_matrix.py` | catalog scoping + include/exclude schema filters across GizmoSQL (3 catalogs), Spice (multi-schema), InfluxDB 3 (iox/system), and quack-on-demand (DuckLake TPC-H); auto-skips absent stacks |
+| `test_doris.py` | Apache Doris (MySQL-dialect): user/pass auth + wrong-password reject, multi-schema sync, schema filters, CTAS write round-trip, writable-feature gating. Needs the Doris profile on Linux — auto-skips via `DORIS_READY` (the BE won't run under podman-on-Windows) |
 | `test_oauth.py` | Keycloak-minted JWTs: admin role read/write, readonly role SELECT-only, tampered-token rejection, and a pinned test documenting that GizmoSQL Core rejects header-borne external bearers from the JDBC `oauth.*` flow (auto-skips without the OAuth profile) |
 
 There is also a Clojure test layer under the repo-root `test/` directory: pure unit tests for the connection spec builder plus Metabase's shared driver harness (test extensions) — run by the `driver-test-suite` CI job, or locally from a Metabase checkout with `DRIVERS=arrow-flight-sql clojure -X:dev:drivers:drivers-dev:test :only '[metabase.driver.arrow-flight-sql-test]'`.

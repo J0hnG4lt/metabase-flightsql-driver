@@ -1,0 +1,44 @@
+# Apache Doris test profile — the first MySQL-dialect Flight SQL backend.
+# Usage:
+#   podman-compose -f docker-compose.yaml -f docker-compose.doris.yaml up -d doris
+#   python scripts/setup_doris.py        # waits for Doris, loads sample schemas
+#
+# The all-in-one image ships Flight SQL DISABLED (arrow_flight_sql_port = -1),
+# so we wrap the entrypoint to enable it on the FE (8070) and BE (8050) before
+# start. Metabase connects to the FE Flight SQL port (doris:8070) with
+# root / empty password and additional-options useServerPrepStmts=false.
+#
+# HOST PREREQUISITES (the Doris BE, a C++ process, refuses to start otherwise):
+#   sudo sysctl -w vm.max_map_count=2000000
+#   sudo swapoff -a
+# On podman/Docker Desktop set these on the VM, e.g.:
+#   podman machine ssh "sudo sysctl -w vm.max_map_count=2000000 && sudo swapoff -a"
+#
+# KNOWN LIMITATION: under podman-on-Windows (WSL2/Hyper-V) the BE starts but its
+# heartbeat service never becomes reachable to the FE, so the backend never goes
+# "alive" and queries can't run. The FE (Java) is fine. Verified working on
+# native Linux. Run this profile there (or in Linux CI); the pytest suite
+# auto-skips when Doris isn't actually usable (DORIS_READY gate).
+#
+# Doris runs FE + BE in one container and wants ~4-6 GB RAM; it starts slower
+# than the other backends. Optional/heavy profile — not the default stack.
+services:
+  doris:
+    image: apache/doris:2.1.9-all
+    container_name: doris
+    hostname: doris
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        sed -i 's/^arrow_flight_sql_port = -1/arrow_flight_sql_port = 8070/' /opt/apache-doris/fe/conf/fe.conf
+        sed -i 's/^arrow_flight_sql_port = -1/arrow_flight_sql_port = 8050/' /opt/apache-doris/be/conf/be.conf
+        exec bash /usr/local/bin/entry_point.sh
+    environment:
+      # single-node all-in-one
+      RECOVERY: "false"
+    ports:
+      - "8070:8070"   # FE Arrow Flight SQL (clients connect here)
+      - "9030:9030"   # FE MySQL protocol (used to load init.sql)
+      - "8030:8030"   # FE HTTP (health)
+    networks:
+      - metanet1
