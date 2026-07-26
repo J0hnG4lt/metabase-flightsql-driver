@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.1.0...0.2.0) (2026-07-26)
+
+
+### Features
+
+* Metabase 63 + Data Studio transforms + quack-on-demand backend + catalog/schema test matrix ([90b6e6b](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/90b6e6ba7efbd527a444bcff08025bb60c410526))
+
+
+### Bug Fixes
+
+* attach release jars from release-please (0.1.0 shipped empty) ([dac7099](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/dac7099c9dbe7ffc75f19ec89623a1462ecf8f32))
+* attach release jars from the release-please workflow ([78d32a3](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/78d32a31c4a299a101440e8a979998612f2de122))
+
+
+### Maintenance
+
+* add quack-on-demand dashboard provisioning script; ignore local artifacts ([80cb0c0](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/80cb0c0968b58ac0a5c2f6d68406afd69ac2d4d6))
+
 ## [0.1.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.0.9...0.1.0) (2026-07-26)
 
 
