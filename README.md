@@ -16,11 +16,39 @@ My main goal was to allow Metabase to use [Spice.ai OSS](https://spiceai.org/doc
 
 CI builds one jar per supported Metabase release line (see release assets):
 
-| Driver release | Metabase | Arrow Flight SQL JDBC |
-|---|---|---|
-| unreleased (main) | v0.62.5 (`-mb62` jar), v0.63.1 (`-mb63` jar) | 19.0.0 |
-| 0.0.9 | v0.62.4 | 18.2.0 |
-| 0.0.5 – 0.0.8 | v0.55 – v0.62 | 18.2.0 |
+| Driver release | Metabase | Arrow Flight SQL JDBC | Notes |
+|---|---|---|---|
+| unreleased (main) | v0.62.5 (`-mb62` jar), v0.63.1 (`-mb63` jar) | 19.0.0 | MB 63 image runs JDK 25 — see *Java / JVM requirements* |
+| 0.1.0 | v0.62.5, v0.63.1 | 19.0.0 | |
+| 0.0.9 | v0.62.4 | 18.2.0 | |
+| 0.0.5 – 0.0.8 | v0.55 – v0.62 | 18.2.0 | |
+
+## Java / JVM requirements (important for Metabase 63+)
+
+The official **Metabase v0.63 Docker image runs JDK 25** (v0.62 ran JDK 21). Two JDK-25 changes break the Arrow Flight SQL JDBC driver's memory allocator at first connection with:
+
+```
+Could not initialize class org.apache.arrow.driver.jdbc.shaded.org.apache.arrow.memory.RootAllocator
+```
+
+1. **JEP 498**: `sun.misc.Unsafe` memory-access methods are disabled by default on JDK 24+ — Arrow's allocator depends on them.
+2. The image's default flags no longer open `java.nio` internals to unnamed modules.
+
+**Fix — pass these JVM options to Metabase** (the bundled `docker-compose.yaml` already does):
+
+```yaml
+environment:
+  JAVA_OPTS: >-
+    --add-opens=java.base/java.nio=ALL-UNNAMED
+    --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+    --sun-misc-unsafe-memory-access=allow
+    --enable-native-access=ALL-UNNAMED
+    -Dio.netty.tryReflectionSetAccessible=true
+```
+
+For bare-JVM installs, add the same flags to the `java ... -jar metabase.jar` command line. On Metabase ≤ 62 (JDK 21) only the two `--add-opens` are needed and the image already includes them; `--sun-misc-unsafe-memory-access` is unknown to JDK ≤ 22 and must be omitted there.
+
+> Symptom guide: the driver *loads* and registers fine at startup — the failure appears only on the first real connection/health-check, and once the class-init fails the JVM caches the failure until restart.
 
 ## Upgrading from 0.0.x
 
@@ -207,6 +235,9 @@ If using Claude Code, run `/e2e-test` for guided end-to-end testing instructions
 - Date/time type handling
 
 ## Troubleshooting
+
+### `Could not initialize class ...arrow.memory.RootAllocator`
+Metabase is running on JDK 24+ (the v0.63 image ships JDK 25) without the required Arrow JVM flags — see **Java / JVM requirements** above.
 
 ### `podman compose` fails with `root@127.0.0.1: Permission denied`
 On Windows with Docker Desktop installed, `podman compose` delegates to

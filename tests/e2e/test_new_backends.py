@@ -21,7 +21,8 @@ def test_influxdb3_bearer_and_database_header(mb, db_factory):
                                     "useEncryption": False,
                                     "disableCertificateVerification": True})
     res = mb.native(db_id, "SELECT COUNT(*) AS n FROM weather")
-    assert res.get("status") == "completed" and res["data"]["rows"][0][0] == 5
+    # seeding is append-style; reruns accumulate rows
+    assert res.get("status") == "completed" and res["data"]["rows"][0][0] >= 5
 
     tables = mb.wait_synced_tables(
         db_id, predicate=lambda ts: any(t["name"] == "weather" for t in ts))

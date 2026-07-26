@@ -124,11 +124,12 @@ driver:
       visible-if:
         advanced-options: true
 
-    # Only writable backends (GizmoSQL/DuckDB, Doris, StarRocks...) can
-    # accept CSV uploads; read-only servers (InfluxDB 3, Spice accelerations,
-    # ROAPI) must leave this off.
+    # Only writable backends (GizmoSQL/DuckDB, quack-on-demand, Doris,
+    # StarRocks...) can accept CSV uploads and Data Studio table transforms;
+    # read-only servers (InfluxDB 3, Spice accelerations, ROAPI) must leave
+    # this off.
     - name: enable-uploads
-      display-name: Writable backend (enable CSV uploads)
+      display-name: Writable backend (enable CSV uploads & transforms)
       type: boolean
       default: false
       visible-if:

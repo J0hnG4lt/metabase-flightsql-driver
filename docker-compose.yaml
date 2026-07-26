@@ -14,7 +14,7 @@ services:
     restart: "no"
 
   metabase:
-    image: metabase/metabase:v0.62.5
+    image: metabase/metabase:v0.63.1.6
     container_name: metabase
     hostname: metabase
     depends_on:
@@ -37,6 +37,17 @@ services:
     ports:
       - "3000:3000"
     environment:
+      # The v0.63 image runs JDK 25 (v0.62 ran JDK 21). Arrow's memory
+      # allocator needs (a) reflective access to java.nio internals and
+      # (b) sun.misc.Unsafe memory access, which JDK 24+ disables by default
+      # (JEP 498) — without these flags the driver dies with
+      # "Could not initialize class ...arrow.memory.RootAllocator".
+      JAVA_OPTS: >-
+        --add-opens=java.base/java.nio=ALL-UNNAMED
+        --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+        --sun-misc-unsafe-memory-access=allow
+        --enable-native-access=ALL-UNNAMED
+        -Dio.netty.tryReflectionSetAccessible=true
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabaseappdb
       MB_DB_PORT: 5432
@@ -132,6 +143,23 @@ services:
       - influxdb3-data:/var/lib/influxdb3/data
     ports:
       - "8181:8181"
+    networks:
+      - metanet1
+
+  # quack-on-demand (starlake-ai): multi-tenant DuckLake serving layer that
+  # speaks Arrow Flight SQL exclusively. `demo` mode self-provisions (tenant
+  # acme, admin/admin) with TLS on a self-signed cert. Its tenant=/pool=
+  # JDBC URL params ride the driver's additional-options passthrough.
+  # Host port 31341 (31338 is taken by gizmosql-tls in the TLS profile);
+  # in-network clients use quack-on-demand:31338. Admin REST API on 20900.
+  quack-on-demand:
+    image: starlakeai/quack-on-demand
+    container_name: quack-on-demand
+    hostname: quack-on-demand
+    command: ["demo"]
+    ports:
+      - "31341:31338"
+      - "20900:20900"
     networks:
       - metanet1
 
