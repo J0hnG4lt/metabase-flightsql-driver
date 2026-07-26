@@ -121,14 +121,18 @@
     [_driver _feature _db]
     supported?))
 
-;; CSV uploads are opt-in PER CONNECTION: only writable Flight SQL backends
-;; (e.g. GizmoSQL/DuckDB) accept CREATE TABLE / INSERT, while others
-;; (InfluxDB 3, Spice accelerations, ROAPI, kamu, Deephaven) are read-only.
-;; The toggle lives in connection details so read-only backends never
-;; advertise the feature.
-(defmethod driver/database-supports? [:arrow-flight-sql :uploads]
-  [_driver _feature db]
-  (boolean (get-in db [:details :enable-uploads])))
+;; Write-dependent features (CSV uploads and Data Studio table transforms)
+;; are opt-in PER CONNECTION: only writable Flight SQL backends (e.g.
+;; GizmoSQL/DuckDB, quack-on-demand, Doris, StarRocks) accept CREATE TABLE /
+;; INSERT, while others (InfluxDB 3, Spice accelerations, ROAPI, kamu,
+;; Deephaven) are read-only. The toggle lives in connection details so
+;; read-only backends never advertise these features. Transforms machinery
+;; (compile-transform CTAS, run-transform!, drop-transform-target!,
+;; execute-raw-queries!) is fully inherited from the :sql/:sql-jdbc parents.
+(doseq [feature [:uploads :transforms/table]]
+  (defmethod driver/database-supports? [:arrow-flight-sql feature]
+    [_driver _feature db]
+    (boolean (get-in db [:details :enable-uploads]))))
 
 ;; ----------------------------------------------------------------
 ;; Build a connection spec from the provided database details.
@@ -367,9 +371,13 @@
   [driver database]
   (let [spec     (sql-jdbc.conn/connection-details->spec driver (:details database))
         catalog  (non-blank-str (get-in database [:details :catalog]))
+        ;; Inline (escaped) rather than a bound parameter: prepared-statement
+        ;; params on information_schema queries return zero rows on some
+        ;; Flight SQL servers (Spice/DataFusion, quack-on-demand) even though
+        ;; they work on GizmoSQL.
         sql+args (if catalog
-                   ["SELECT table_name, table_schema FROM information_schema.tables WHERE LOWER(table_catalog) = LOWER(?)"
-                    catalog]
+                   [(format "SELECT table_name, table_schema FROM information_schema.tables WHERE LOWER(table_catalog) = LOWER('%s')"
+                            (str/replace catalog "'" "''"))]
                    ["SELECT table_name, table_schema FROM information_schema.tables"])
         excluded (sql-jdbc.sync/excluded-schemas driver)
         conn     (jdbc/get-connection spec)]

@@ -15,11 +15,14 @@ ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 DATABASE = "demo"
 
 LINES = "\n".join(
-    f"weather,city={city} temp={temp},humidity={hum}"
-    for city, temp, hum in [
-        ("Madrid", 31.5, 28), ("Berlin", 22.1, 55), ("Caracas", 27.9, 74),
-        ("Tokyo", 29.4, 61), ("Austin", 35.2, 40),
-    ]
+    [f"weather,city={city} temp={temp},humidity={hum}"
+     for city, temp, hum in [
+         ("Madrid", 31.5, 28), ("Berlin", 22.1, 55), ("Caracas", 27.9, 74),
+         ("Tokyo", 29.4, 61), ("Austin", 35.2, 40)]]
+    # extra measurements so the iox schema has several tables (schema-filter
+    # and multi-table sync tests)
+    + [f"cpu,host=host{n} usage={u},cores=8i" for n, u in [(1, 42.5), (2, 71.2), (3, 12.9)]]
+    + [f"sensors,device=dev{n} reading={r}" for n, r in [(1, 0.42), (2, 0.87)]]
 )
 
 

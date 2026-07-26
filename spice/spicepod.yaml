@@ -7,8 +7,18 @@ runtime:
       enabled: true
       keys:
         - 1234567890
+# Multiple schemas inside the `spice` catalog (schema-qualified dataset
+# names) so catalog/schema-filter behavior can be tested like on GizmoSQL.
 datasets:
   - name: yellow_taxis
+    from: file://data/yellow_tripdata_2024-01.parquet
+    params:
+      file_format: parquet
+  - name: transport.trips
+    from: file://data/yellow_tripdata_2024-01.parquet
+    params:
+      file_format: parquet
+  - name: finance.taxi_fares
     from: file://data/yellow_tripdata_2024-01.parquet
     params:
       file_format: parquet
