@@ -205,6 +205,15 @@
       [(str "user=" (codec/url-encode username*))
        (str "password=" (codec/url-encode password*))]
 
+      ;; username with an EMPTY/absent password — send it anyway (with an
+      ;; empty password), e.g. Doris/StarRocks `root` with no password. Without
+      ;; this the handshake carries no credentials and the server rejects the
+      ;; connection as UNAUTHENTICATED.
+      username*
+      [(str "user=" (codec/url-encode username*))
+       "password="]
+
+      ;; blank user + password (Spice.ai API-key convention)
       password*
       ["user=" (str "password=" (codec/url-encode password*))]
 
