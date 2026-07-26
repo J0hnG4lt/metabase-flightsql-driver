@@ -14,7 +14,7 @@ services:
     restart: "no"
 
   metabase:
-    image: metabase/metabase:v0.62.4
+    image: metabase/metabase:v0.62.5
     container_name: metabase
     hostname: metabase
     depends_on:
@@ -65,7 +65,10 @@ services:
       - metanet1
 
   spiced:
-    image: spiceai/spiceai:1.10.2
+    # 2.x: models are bundled in the default image (bigger pull), spicepod
+    # version v2 is the default, and runtime.results_cache was renamed to
+    # runtime.caching.sql_results.
+    image: spiceai/spiceai:2.1.1
     container_name: spiced-container
     privileged: true
     # Note: removed 'user: root' as spiceai 1.10.2+ doesn't have root in passwd file
@@ -87,8 +90,55 @@ services:
     networks:
       - metanet1
 
+  # Same Spice image without api-key auth: positive test target for the
+  # driver's anonymous (no credentials) connection path.
+  spiced-anon:
+    image: spiceai/spiceai:2.1.1
+    container_name: spiced-anon
+    hostname: spiced-anon
+    privileged: true
+    tmpfs:
+      - /spice_sandbox
+    volumes:
+      - type: bind
+        source: ./spice/spicepod-anon.yaml
+        target: /app/spicepod.yaml
+      - type: bind
+        source: ./data
+        target: /app/data
+    command: "--http 0.0.0.0:8090 --metrics 0.0.0.0:9090 --flight 0.0.0.0:50051"
+    ports:
+      - "50052:50051"
+    networks:
+      - metanet1
+
+  # InfluxDB 3 Core: bearer-token-only Flight SQL on port 8181 (HTTP + gRPC
+  # share the port). Database selection travels as a `database` gRPC header,
+  # which the driver passes through via additional-options. Read-only from
+  # Metabase's perspective (writes use line protocol over HTTP).
+  # Seed with: python scripts/setup_influxdb3.py  (creates admin token ->
+  # .env INFLUXDB3_TOKEN, writes sample data into the `demo` database).
+  influxdb3:
+    image: influxdb:3-core
+    container_name: influxdb3
+    hostname: influxdb3
+    command:
+      - influxdb3
+      - serve
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+    volumes:
+      - influxdb3-data:/var/lib/influxdb3/data
+    ports:
+      - "8181:8181"
+    networks:
+      - metanet1
+
   gizmosql:
-    image: gizmodata/gizmosql:latest
+    # Pinned (releases are near-weekly); a -slim and an LTS channel
+    # (gizmodata/gizmosql-lts) also exist.
+    image: gizmodata/gizmosql:v1.35.1
     container_name: gizmosql
     hostname: gizmosql
     volumes:
@@ -99,11 +149,29 @@ services:
       TLS_ENABLED: "false"
       GIZMOSQL_USERNAME: "gizmosql"
       GIZMOSQL_PASSWORD: "gizmosql_password"
+      # Signs the session JWTs the server issues after basic auth. Without a
+      # stable value, every container restart invalidates the bearer tokens
+      # Metabase's pooled connections retained (retainAuth) -> auth errors
+      # until the pool cycles. Demo value; use a real secret in production.
+      SECRET_KEY: "flightsql-demo-jwt-signing-key-0123456789abcdef"
       PRINT_QUERIES: "1"
       DATABASE_FILENAME: ":memory:"
       INIT_SQL_COMMANDS_FILE: "/opt/gizmosql/init.sql"
     ports:
       - "31337:31337"
+    networks:
+      - metanet1
+
+  # SMTP sink for testing alerts/subscriptions delivery (web UI + REST API
+  # on :1080, SMTP on :1025). Metabase email settings are configured by the
+  # e2e suite.
+  maildev:
+    image: maildev/maildev:2.2.1
+    container_name: maildev
+    hostname: maildev
+    ports:
+      - "1080:1080"
+      - "1025:1025"
     networks:
       - metanet1
 
@@ -114,3 +182,4 @@ networks:
 volumes:
   pgdata:
   jar-volume:
+  influxdb3-data:

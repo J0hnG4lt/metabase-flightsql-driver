@@ -1,0 +1,64 @@
+# TLS/mTLS test profile. Usage:
+#   ./scripts/generate_tls_certs.sh        # once, creates ./tls/
+#   podman-compose -f docker-compose.yaml -f docker-compose.tls.yaml up -d
+#
+# Adds two GizmoSQL instances using the generated certificates:
+#   gizmosql-tls  (host port 31338): TLS with our CA-signed server cert
+#   gizmosql-mtls (host port 31339): same + REQUIRES client certificates
+# and mounts ./tls into the metabase container so the driver can reference
+# the CA / client cert / client key as local file paths
+# (/opt/flightsql-tls/*.pem) in connection details.
+#
+# How the certs reach the server: the image entrypoint
+# (scripts/start_gizmosql.sh) passes --tls tls/cert0.pem tls/cert0.key and
+# only generates self-signed certs when tls/cert0.pem is absent — so we
+# bind-mount our CA-signed pair onto those exact paths. mTLS is enabled via
+# the MTLS_CA_CERT_FILENAME env (mapped to --mtls-ca-cert-filename).
+services:
+  metabase:
+    volumes:
+      - ./tls:/opt/flightsql-tls:ro
+
+  gizmosql-tls:
+    image: gizmodata/gizmosql:v1.35.1
+    container_name: gizmosql-tls
+    hostname: gizmosql-tls
+    volumes:
+      - ./tls/server-cert.pem:/opt/gizmosql/tls/cert0.pem:ro
+      - ./tls/server-key.pem:/opt/gizmosql/tls/cert0.key:ro
+      - ./gizmosql/init.sql:/opt/gizmosql/init.sql:ro
+    environment:
+      TLS_ENABLED: "1"
+      GIZMOSQL_USERNAME: "gizmosql"
+      GIZMOSQL_PASSWORD: "gizmosql_password"
+      SECRET_KEY: "flightsql-demo-jwt-signing-key-0123456789abcdef"
+      PRINT_QUERIES: "1"
+      DATABASE_FILENAME: ":memory:"
+      INIT_SQL_COMMANDS_FILE: "/opt/gizmosql/init.sql"
+    ports:
+      - "31338:31337"
+    networks:
+      - metanet1
+
+  gizmosql-mtls:
+    image: gizmodata/gizmosql:v1.35.1
+    container_name: gizmosql-mtls
+    hostname: gizmosql-mtls
+    volumes:
+      - ./tls/server-cert.pem:/opt/gizmosql/tls/cert0.pem:ro
+      - ./tls/server-key.pem:/opt/gizmosql/tls/cert0.key:ro
+      - ./tls/ca-cert.pem:/opt/gizmosql/tls/client-ca.pem:ro
+      - ./gizmosql/init.sql:/opt/gizmosql/init.sql:ro
+    environment:
+      TLS_ENABLED: "1"
+      MTLS_CA_CERT_FILENAME: "/opt/gizmosql/tls/client-ca.pem"
+      GIZMOSQL_USERNAME: "gizmosql"
+      GIZMOSQL_PASSWORD: "gizmosql_password"
+      SECRET_KEY: "flightsql-demo-jwt-signing-key-0123456789abcdef"
+      PRINT_QUERIES: "1"
+      DATABASE_FILENAME: ":memory:"
+      INIT_SQL_COMMANDS_FILE: "/opt/gizmosql/init.sql"
+    ports:
+      - "31339:31337"
+    networks:
+      - metanet1

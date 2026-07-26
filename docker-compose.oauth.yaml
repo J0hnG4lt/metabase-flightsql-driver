@@ -1,0 +1,58 @@
+# OAuth2 test profile. Usage:
+#   python scripts/generate_oauth_config.py     # once, creates ./oauth/
+#   podman-compose -f docker-compose.yaml -f docker-compose.oauth.yaml up -d keycloak gizmosql-oauth
+#
+# Completes the auth matrix locally:
+#   - JDBC oauth.* client_credentials flow (Arrow JDBC >= 19.0.0): the driver
+#     fetches a token from Keycloak and sends it as a bearer; GizmoSQL Core
+#     verifies the RS256 signature with the pre-generated certificate
+#     (TOKEN_SIGNATURE_VERIFY_CERT_PATH) plus issuer/audience checks.
+#   - GizmoSQL external-JWT convention (username "token" + JWT password),
+#     including role claims: flightsql-m2m mints role=admin tokens,
+#     flightsql-readonly mints role=readonly (SELECT-only) tokens.
+#
+# KC_HOSTNAME is pinned to the in-network URL so the token issuer is stable
+# no matter where the token request comes from (host uses localhost:8180).
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    container_name: keycloak
+    hostname: keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://keycloak:8080
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - ./oauth/realm.json:/opt/keycloak/data/import/realm.json:ro
+    ports:
+      - "8180:8080"
+    networks:
+      - metanet1
+
+  gizmosql-oauth:
+    image: gizmodata/gizmosql:v1.35.1
+    container_name: gizmosql-oauth
+    hostname: gizmosql-oauth
+    volumes:
+      - ./oauth/signing-cert.pem:/opt/oauth/signing-cert.pem:ro
+      - ./gizmosql/init.sql:/opt/gizmosql/init.sql:ro
+    environment:
+      TLS_ENABLED: "0"
+      GIZMOSQL_USERNAME: "gizmosql"
+      GIZMOSQL_PASSWORD: "gizmosql_password"
+      SECRET_KEY: "flightsql-demo-jwt-signing-key-0123456789abcdef"
+      DATABASE_FILENAME: ":memory:"
+      INIT_SQL_COMMANDS_FILE: "/opt/gizmosql/init.sql"
+      PRINT_QUERIES: "1"
+      # NOTE: the unprefixed TOKEN_* env vars from --help are not applied in
+      # the container path; pass the flags via the entrypoint's escape hatch.
+      GIZMOSQL_EXTRA_ARGS: >-
+        --token-allowed-issuer "http://keycloak:8080/realms/flightsql"
+        --token-allowed-audience "gizmosql"
+        --token-signature-verify-cert-path /opt/oauth/signing-cert.pem
+    ports:
+      - "31340:31337"
+    networks:
+      - metanet1

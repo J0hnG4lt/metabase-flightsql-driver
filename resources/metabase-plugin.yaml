@@ -25,42 +25,132 @@ driver:
         - port
         - { placeholder: "443" }
 
-    # Username is custom (built-in is 'user'); that's fine
-    - name: username
-      display-name: Username (optional)
-      required: false
+    # ------------------------------------------------------------------
+    # Authentication. A boolean toggle switches between username/password
+    # and bearer-token fields — the same pattern the built-in Databricks
+    # (use-m2m) and Snowflake (use-password) drivers use. (The build-time
+    # manifest linter only allows boolean/string/secret/... property types,
+    # so a select dropdown is not authorable in yaml.)
+    #
+    # Coverage of the Flight SQL auth landscape:
+    #   user/password        -> Flight handshake basic auth (GizmoSQL, Dremio,
+    #                           Doris, StarRocks, Denodo, ...)
+    #   Spice.ai API key     -> leave Username EMPTY, put the key in Password
+    #   GizmoSQL external JWT-> Username literally "token", JWT in Password
+    #   bearer/PAT/API token -> enable "Use token" (InfluxDB 3, Dremio PAT)
+    #   anonymous            -> leave everything blank (ROAPI, kamu, Ballista)
+    #   OAuth2 / headers     -> additional-options (oauth.*, custom params)
+    - name: use-token
+      display-name: Authenticate with a token instead of username/password
+      type: boolean
+      default: false
 
-    # Built-in password; just make it optional in UI
+    - name: username
+      display-name: Username
+      required: false
+      visible-if:
+        use-token: false
+
     - merge:
         - password
-        - { display-name: "Password (optional)", required: false }
+        - display-name: Password
+          required: false
+          visible-if:
+            use-token: false
 
-    # Token is a NEW field (do not use merge here)
+    # Secret-typed field: stored as token-value / token-id in details and
+    # resolved in the driver via driver-api/secret-value-as-string. Sent as
+    # "Authorization: Bearer <token>".
     - name: token
-      display-name: Token (optional)
+      display-name: Bearer token / PAT / API key
       type: secret
+      secret-kind: password
       required: false
+      visible-if:
+        use-token: true
 
     - name: catalog
       display-name: Catalog (optional)
       type: string
       required: false
 
+    # Standard include/exclude schema patterns (comma-separated, * wildcards);
+    # honored during table discovery in describe-database.
+    - name: schema-filters
+      type: schema-filters
+      display-name: Schemas
+
+    # Secure by default, matching both the Arrow Flight SQL JDBC driver's own
+    # defaults and the :or defaults in connection-details->spec. Local demo
+    # servers without TLS need Use Encryption switched off explicitly.
     - name: useEncryption
       display-name: Use Encryption
       type: boolean
-      default: false
+      default: true
 
     - name: disableCertificateVerification
       display-name: Disable Certificate Verification
       type: boolean
-      default: true
+      default: false
 
     # Advanced section helpers are literal strings
     - advanced-options-start
+
+    # mTLS / custom CA. Stored as secrets; materialized to files and passed
+    # to the JDBC driver as tlsRootCerts / clientCertificate / clientKey.
+    # visible-if advanced-options keeps them inside the collapsed section
+    # (the secret expansion does not inherit the section gating on its own).
+    - name: tls-root-certs
+      display-name: Server CA certificate (PEM)
+      type: secret
+      secret-kind: pem-cert
+      required: false
+      visible-if:
+        advanced-options: true
+
+    - name: client-cert
+      display-name: mTLS client certificate (PEM)
+      type: secret
+      secret-kind: pem-cert
+      required: false
+      visible-if:
+        advanced-options: true
+
+    - name: client-key
+      display-name: mTLS client key (PEM)
+      type: secret
+      secret-kind: pem-cert
+      required: false
+      visible-if:
+        advanced-options: true
+
+    # Only writable backends (GizmoSQL/DuckDB, Doris, StarRocks...) can
+    # accept CSV uploads; read-only servers (InfluxDB 3, Spice accelerations,
+    # ROAPI) must leave this off.
+    - name: enable-uploads
+      display-name: Writable backend (enable CSV uploads)
+      type: boolean
+      default: false
+      visible-if:
+        advanced-options: true
+
+    # String (not integer): the manifest linter has no integer type; the
+    # driver coerces it.
+    - name: connect-timeout-millis
+      display-name: Connect timeout (ms)
+      placeholder: "10000"
+      required: false
+      visible-if:
+        advanced-options: true
+
+    # Free-form URL parameters appended to the JDBC URL. Doubles as the
+    # escape hatch for oauth.* properties (OAuth2 client_credentials /
+    # token_exchange, Arrow JDBC >= 19.0.0), retainCookies/retainAuth, and
+    # custom gRPC headers (any unknown parameter is forwarded as a header,
+    # e.g. database=<db> for InfluxDB 3).
     - merge:
         - additional-options
-        - { placeholder: "threadPoolSize=1" }
+        - { placeholder: "threadPoolSize=1&retainAuth=true" }
     - default-advanced-options
 
 init:

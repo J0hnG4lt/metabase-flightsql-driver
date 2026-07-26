@@ -1,4 +1,6 @@
-FROM openjdk:11-jdk-slim
+# Temurin 21 matches the JDK Metabase itself runs on; the deprecated
+# openjdk:11 image predates Arrow 19's JDK 17+ requirement.
+FROM eclipse-temurin:21-jdk-jammy
 
 # Install curl for downloading Leiningen
 RUN apt-get update && apt-get install -y curl

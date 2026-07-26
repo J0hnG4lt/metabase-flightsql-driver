@@ -5,7 +5,7 @@
   ...
   " 
   (:import
-   (java.sql Connection PreparedStatement ResultSet Timestamp Types Date Time)
+   (java.sql Connection PreparedStatement ResultSet Timestamp)
    (java.time LocalDate LocalTime LocalDateTime OffsetDateTime)
    )
   (:require
@@ -17,6 +17,8 @@
    [ring.util.codec :as codec]
    ;; Core Metabase driver functionality.
    [metabase.driver :as driver]
+   ;; Sanctioned facade over Metabase internals (secrets, QP helpers, ...).
+   [metabase.driver-api.core :as driver-api]
    ;; SQL generation and manipulation.
    [honey.sql :as sql]
    ;; Connection management for SQL-JDBC drivers.
@@ -27,11 +29,21 @@
    [metabase.driver.sql.query-processor :as sql.qp]
    ;; Schema synchronization for SQL-JDBC drivers.
    [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
+   ;; Schema inclusion/exclusion patterns from the schema-filters property.
+   [metabase.driver.sync :as driver.s]
    ;; SQL execution helper functions.
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
    [metabase.util.honey-sql-2        :as h2x] 
 
    ))
+
+;; ----------------------------------------------------------------
+;; In production the plugin manifest registers the (lazy-loading) driver
+;; before this namespace loads, but Metabase's dev/test harness loads driver
+;; namespaces directly and expects them to self-register — the same
+;; unconditional call every in-tree module driver makes (re-registration is
+;; idempotent).
+(driver/register! :arrow-flight-sql :parent :sql-jdbc)
 
 ;; ----------------------------------------------------------------
 ;; Define the display name for the Arrow Flight SQL driver.
@@ -43,6 +55,13 @@
 ;; Arrow Flight SQL JDBC driver throws NullPointerException when checking
 ;; supportsTransactionIsolationLevel because some servers (like GizmoSQL)
 ;; don't return required SqlInfo metadata.
+;; Executor used only to unblock stuck socket reads via setNetworkTimeout,
+;; mirroring the default implementation's behavior.
+(defonce ^:private network-timeout-executor
+  (delay (java.util.concurrent.Executors/newCachedThreadPool)))
+
+(def ^:private network-timeout-ms (* 10 60 1000))
+
 (defmethod sql-jdbc.execute/do-with-connection-with-options :arrow-flight-sql
   [driver db-or-id-or-spec options f]
   (sql-jdbc.execute/do-with-resolved-connection
@@ -50,38 +69,66 @@
    db-or-id-or-spec
    options
    (fn [^Connection conn]
-     ;; Skip set-best-transaction-level! which causes NPE with Flight SQL.
-     ;; Just set basic safe options that Flight SQL can handle.
-     (try
-       (.setReadOnly conn true)
-       (catch Exception _ nil))
-     (try
-       (.setAutoCommit conn true)
-       (catch Exception _ nil))
-     (try
-       (.setHoldability conn ResultSet/CLOSE_CURSORS_AT_COMMIT)
-       (catch Exception _ nil))
+     ;; Deliberately skip set-best-transaction-level!: servers with incomplete
+     ;; GetSqlInfo make DatabaseMetaData.supportsTransactionIsolationLevel NPE.
+     ;; Session-timezone is not handled yet, matching :set-timezone unsupported.
+     ;; Like the default impl, only set options on the outermost acquisition so
+     ;; nested (e.g. :write?) scopes are not clobbered.
+     (when-not (sql-jdbc.execute/recursive-connection?)
+       (try
+         ;; a hint for the server, and the honest value for future write support
+         (.setReadOnly conn (not (:write? options)))
+         (catch Throwable _ nil))
+       (when-not (:write? options)
+         (try
+           (.setAutoCommit conn true)
+           (catch Throwable _ nil)))
+       (try
+         ;; releases threads stuck in blocking socket reads; .close alone doesn't
+         (.setNetworkTimeout conn ^java.util.concurrent.Executor @network-timeout-executor
+                             network-timeout-ms)
+         (catch Throwable _ nil))
+       (try
+         (.setHoldability conn ResultSet/CLOSE_CURSORS_AT_COMMIT)
+         (catch Throwable _ nil)))
      (f conn))))
 
 ;; ----------------------------------------------------------------
 ;; Register feature support flags for the driver.
-;; This loop defines which features the driver supports.
+;; Note: the :sql parent already defaults ~26 features to true (expressions,
+;; binning, nested-queries, joins, native-parameters, parameterized-sql, ...),
+;; so only deviations from the parent defaults are declared here.
 (doseq [[feature supported?]
-        {:describe-fields           true
+        {;; one streaming information_schema.columns query for the whole DB
+         :describe-fields           true
          :connection-impersonation  false
-         :convert-timezone          true
-         :parameterized-sql         true}]
+         ;; No sql.qp/->honeysql [:arrow-flight-sql :convert-timezone]
+         ;; implementation exists (and there is no [:sql ...] default), so
+         ;; declaring true exposed convertTimezone() in the expression editor
+         ;; only for it to fail at query-compile time.
+         :convert-timezone          false
+         ;; FK metadata is not reliably available across Flight SQL servers.
+         ;; The :sql parent defaults this to true, which (since Metabase 0.63
+         ;; removed describe-table-fks) makes sync call driver/describe-fks,
+         ;; whose sql-jdbc fallback reads JDBC DatabaseMetaData — a path that
+         ;; NPEs on servers with incomplete GetSqlInfo support.
+         :metadata/key-constraints  false
+         ;; DuckDB has neither IDENTITY columns nor implicit rowids for plain
+         ;; INTEGER PKs, so uploaded tables carry no _mb_row_id column (the
+         ;; ClickHouse precedent).
+         :upload-with-auto-pk       false}]
   (defmethod driver/database-supports? [:arrow-flight-sql feature]
     [_driver _feature _db]
     supported?))
 
-;; ----------------------------------------------------------------
-;; Helper function that returns the string if it is non-blank;
-;; otherwise, it returns the provided default value.
-(defn non-blank [s default]
-  (if (and (string? s) (not (str/blank? s)))
-    s
-    default))
+;; CSV uploads are opt-in PER CONNECTION: only writable Flight SQL backends
+;; (e.g. GizmoSQL/DuckDB) accept CREATE TABLE / INSERT, while others
+;; (InfluxDB 3, Spice accelerations, ROAPI, kamu, Deephaven) are read-only.
+;; The toggle lives in connection details so read-only backends never
+;; advertise the feature.
+(defmethod driver/database-supports? [:arrow-flight-sql :uploads]
+  [_driver _feature db]
+  (boolean (get-in db [:details :enable-uploads])))
 
 ;; ----------------------------------------------------------------
 ;; Build a connection spec from the provided database details.
@@ -102,26 +149,96 @@
                      :else val)
     val))
 
+(defn- non-blank-str [s]
+  (when (and (string? s) (not (str/blank? s)))
+    s))
+
+(defn- secret-string
+  "Resolve a secret-typed connection property (stored by the UI as
+  <prop>-value / <prop>-id) with a fallback to a plain key of the same name
+  for connections created directly via the REST API."
+  [driver details prop]
+  (or (driver-api/secret-value-as-string driver details prop)
+      (non-blank-str (get details (keyword prop)))))
+
+(defn- secret-file-path
+  "Materialize a secret-typed connection property to a file on disk and return
+  its absolute path (the Arrow JDBC driver wants file paths for TLS material)."
+  [driver details prop]
+  (try
+    (some-> (driver-api/secret-value-as-file! driver details prop) str non-blank-str)
+    (catch Throwable e
+      (log/warnf e "Could not resolve secret property %s as a file" prop)
+      nil)))
+
+(defn- auth-query-params
+  "Query-string fragments for the configured authentication.
+
+  - use-token true (UI toggle; legacy auth-method \"token\" also honored)
+    -> authorization=Bearer <token> (InfluxDB 3 tokens, Dremio PATs, any
+       pre-issued bearer/API token)
+  - username + password -> Flight handshake basic auth. A blank username with
+    a password is emitted as user=&password=<pw> — the Spice.ai API-key
+    convention. GizmoSQL external JWTs use the literal username \"token\"
+    with the JWT as the password.
+  - nothing configured -> anonymous.
+
+  Connections created before the use-token toggle carry neither flag; the
+  mode is inferred from which credentials are present."
+  [driver {:keys [use-token auth-method username user password] :as details}]
+  (let [username* (or (non-blank-str username) (non-blank-str user))
+        password* (non-blank-str password)
+        token*    (secret-string driver details "token")
+        token?    (cond
+                    (some? use-token)           (boolean use-token)
+                    (non-blank-str auth-method) (contains? #{"token" "jwt"} auth-method)
+                    :else                       (some? token*))]
+    (cond
+      (and token? token*)
+      [(str "authorization=Bearer%20" (codec/url-encode token*))]
+
+      (and username* password*)
+      [(str "user=" (codec/url-encode username*))
+       (str "password=" (codec/url-encode password*))]
+
+      password*
+      ["user=" (str "password=" (codec/url-encode password*))]
+
+      :else [])))
+
+;; ----------------------------------------------------------------
+;; Backfill the use-token toggle on details created before it existed, so the
+;; admin form opens in the right mode when editing (the token field is hidden
+;; behind visible-if use-token — without the flag, a stored token would be
+;; invisible and could be lost on save).
+(defn- backfill-auth-flags [details]
+  (if (or (not (map? details)) (contains? details :use-token) (empty? details))
+    details
+    (let [token? (boolean (or (contains? #{"token" "jwt"} (:auth-method details))
+                              (non-blank-str (:token details))
+                              (:token-id details)
+                              (non-blank-str (:token-value details))))]
+      (assoc details :use-token token?))))
+
+(defmethod driver/normalize-db-details :arrow-flight-sql
+  [_driver database]
+  (cond-> (update database :details backfill-auth-flags)
+    (:write-data-details database) (update :write-data-details backfill-auth-flags)
+    (:admin-details database)      (update :admin-details backfill-auth-flags)))
+
 (defmethod sql-jdbc.conn/connection-details->spec :arrow-flight-sql
-  [_ details]
-  (let [{:keys [host port token username user password catalog useEncryption disableCertificateVerification]
+  [driver details]
+  (let [{:keys [host port useEncryption disableCertificateVerification]
          :or   {useEncryption true
                 disableCertificateVerification false}} details
-        ;; prefer :username (manifest) but fall back to :user
-        username* (or (when (and (string? username) (not (str/blank? username))) username)
-                      (when (and (string? user)      (not (str/blank? user)))      user))
 
-        ;; URL-encode only provided creds
-        enc-token (when (and (string? token)     (not (str/blank? token)))     (codec/url-encode token))
-        enc-user  (when (and (string? username*) (not (str/blank? username*))) (codec/url-encode username*))
-        enc-pass  (when (and (string? password)  (not (str/blank? password)))  (codec/url-encode password))
+        ;; TLS material is secret-typed; the JDBC driver takes file paths.
+        root-certs-path  (secret-file-path driver details "tls-root-certs")
+        client-cert-path (secret-file-path driver details "client-cert")
+        client-key-path  (secret-file-path driver details "client-key")
 
-        ;; Choose exactly ONE auth mode: token wins over user/pass
-        auth-qps  (cond
-                    enc-token               [(str "authorization=Bearer%20" enc-token)]
-                    (and enc-user enc-pass) [(str "user=" enc-user)
-                                             (str "password=" enc-pass)]
-                    :else                   [])
+        connect-timeout  (some-> (:connect-timeout-millis details) str non-blank-str)
+        additional-opts  (non-blank-str (:additional-options details))
 
         ;; Build query params
         ;; NOTE: We intentionally do NOT include catalog in the JDBC URL.
@@ -129,18 +246,25 @@
         ;; but many Flight SQL servers (e.g., GizmoSQL/DuckDB) don't implement this RPC.
         ;; Instead, we use the catalog value only for filtering during schema sync
         ;; (see describe-database and describe-fields-sql methods).
-        params    (cond-> []
-                    true (into auth-qps)
+        params    (cond-> (vec (auth-query-params driver details))
                     true (conj (str "useEncryption=" (boolean useEncryption)))
-                    true (conj (str "disableCertificateVerification=" (boolean disableCertificateVerification))))
+                    true (conj (str "disableCertificateVerification=" (boolean disableCertificateVerification)))
+                    root-certs-path  (conj (str "tlsRootCerts=" (codec/url-encode root-certs-path)))
+                    (and client-cert-path client-key-path)
+                    (into [(str "clientCertificate=" (codec/url-encode client-cert-path))
+                           (str "clientKey=" (codec/url-encode client-key-path))])
+                    connect-timeout  (conj (str "connectTimeoutMillis=" connect-timeout))
+                    ;; free-form passthrough: threadPoolSize, retainAuth/retainCookies,
+                    ;; oauth.* (Arrow JDBC >= 19.0.0), or custom gRPC headers
+                    additional-opts  (conj additional-opts))
         qp        (str/join "&" params)
 
-        ;; Full JDBC URL
-        full-url  (str "jdbc:arrow-flight-sql://"
+        base-url  (str "jdbc:arrow-flight-sql://"
                        (or host "localhost") ":"
-                       (or port 443)
-                       (when-not (str/blank? qp) (str "?" qp)))]
-        (log/debug "Arrow Flight SQL connection URL:" full-url)
+                       (or port 443))
+        full-url  (str base-url (when-not (str/blank? qp) (str "?" qp)))]
+    ;; never log the query string — it carries credentials
+    (log/debug "Arrow Flight SQL connection URL (params redacted):" base-url)
     (let [scheme  "jdbc:arrow-flight-sql:"
           subname (subs full-url (count scheme))]
       {:classname   "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver"
@@ -150,33 +274,12 @@
        :cast arrow-flight-sql-cast-fn})))
 
 ;; ----------------------------------------------------------------
-;; Test the connection to the Arrow Flight SQL database.
-;; Executes a simple "SELECT 1" query to verify connectivity.
-(defmethod driver/can-connect? :arrow-flight-sql
-  [driver details]
-  (let [query-succeeded? (atom false)]
-    (try
-      (let [spec (sql-jdbc.conn/connection-details->spec driver details)]
-        (log/info "Testing connection with spec, attempting to get connection...")
-        (try
-          (with-open [conn (jdbc/get-connection spec)]
-            (log/info "Connection obtained, executing test query...")
-            (let [result (jdbc/query {:connection conn} ["SELECT 1"])]
-              (log/info "Test query successful:" result)
-              (reset! query-succeeded? true)
-              true))
-          (catch java.sql.SQLException e
-            ;; If the query succeeded but closing failed (known issue with Flight SQL + catalog param),
-            ;; treat as successful connection
-            (if @query-succeeded?
-              (do
-                (log/warn "Connection close failed but query succeeded, treating as success:" (.getMessage e))
-                true)
-              (throw e)))))
-      (catch Exception e
-        (log/error e "Flight SQL connection test failed.")
-        false))))
-
+;; NOTE: no driver/can-connect? override. The :sql-jdbc default runs the
+;; test query through the shared machinery, which also resolves secrets,
+;; SSH tunnels, and EE auth providers. The old override returned false when
+;; connection close threw a non-SQLException even though the test query had
+;; succeeded (issue #11); Arrow JDBC >= 19.0.0 suppresses those benign
+;; close-time gRPC exceptions at the source (apache/arrow-java GH-863).
 
 ;; ----------------------------------------------------------------
 ;; Map raw database types to Metabase base types.
@@ -249,69 +352,76 @@
       (log/debug "Ignoring connection close error (known Flight SQL issue with catalog param):" (.getMessage e)))))
 
 
+;; System schemas that are never interesting to sync, regardless of user
+;; schema filters. Consulted by our describe-database implementation.
+(defmethod sql-jdbc.sync/excluded-schemas :arrow-flight-sql
+  [_driver]
+  #{"information_schema" "runtime" "pg_catalog"})
+
 ;; List tables by querying information_schema.tables.
 ;; When a catalog is specified in connection details, we filter by table_catalog.
 ;; Catalog hierarchy: Catalog → Schema → Table
+;; User include/exclude patterns from the schema-filters connection property
+;; are honored via driver.s/include-schema?.
 (defmethod driver/describe-database :arrow-flight-sql
   [driver database]
-  (let [spec (sql-jdbc.conn/connection-details->spec :arrow-flight-sql (:details database))
-        catalog (get-in database [:details :catalog])
-        use-catalog? (and (string? catalog) (not (str/blank? catalog)))
-        ;; Filter by table_catalog when specified
-        query (if use-catalog?
-                (format "SELECT table_name, table_schema FROM information_schema.tables WHERE LOWER(table_catalog) = LOWER('%s')" catalog)
-                "SELECT table_name, table_schema FROM information_schema.tables")
-        conn (jdbc/get-connection spec)]
+  (let [spec     (sql-jdbc.conn/connection-details->spec driver (:details database))
+        catalog  (non-blank-str (get-in database [:details :catalog]))
+        sql+args (if catalog
+                   ["SELECT table_name, table_schema FROM information_schema.tables WHERE LOWER(table_catalog) = LOWER(?)"
+                    catalog]
+                   ["SELECT table_name, table_schema FROM information_schema.tables"])
+        excluded (sql-jdbc.sync/excluded-schemas driver)
+        conn     (jdbc/get-connection spec)]
     (try
-      (let [rows (jdbc/query {:connection conn}
-                             [query]
-                             {:identifiers str/lower-case})
-            ;; Filter out system schemas
-            formatted (->> rows
-                           (filter #(not (contains? #{"information_schema" "runtime" "pg_catalog"}
-                                                    (str/lower-case (or (:table_schema %) "")))))
-                           (map (fn [row]
-                                  {:name   (:table_name row)
-                                   :schema (:table_schema row)})))]
-        {:tables (into #{} formatted)})
+      (let [rows   (jdbc/query {:connection conn} sql+args {:identifiers str/lower-case})
+            tables (keep (fn [{:keys [table_name table_schema]}]
+                           (when (and (not (contains? excluded (str/lower-case (or table_schema ""))))
+                                      (driver.s/include-schema? database table_schema))
+                             {:name   table_name
+                              :schema table_schema}))
+                         rows)]
+        {:tables (into #{} tables)})
       (finally
         (safely-close-connection conn)))))
 
 ;; ----------------------------------------------------------------
-;; Describe a specific table by executing a DESCRIBE query.
+;; Describe a single table via information_schema.columns. This is mostly a
+;; fallback path (sync uses the bulk describe-fields because :describe-fields
+;; is true); it deliberately avoids DuckDB's DESCRIBE statement so it works on
+;; any Flight SQL server exposing information_schema.
 (defmethod driver/describe-table :arrow-flight-sql
   [driver database {:keys [name schema]}]
   (let [spec (sql-jdbc.conn/connection-details->spec driver (:details database))
         conn (jdbc/get-connection spec)]
     (try
-      (let [query   (format "DESCRIBE \"%s\".\"%s\"" schema name) ;; Build the DESCRIBE query using schema and table name
-            results (jdbc/query {:connection conn} [query] {:identifiers str/lower-case})
-            fields  (mapv (fn [{:keys [column_name data_type is_nullable]}]
-                            (let [normalized-name (-> column_name
-                                                      (str/replace #"^\"|\"$" "")
-                                                      str/lower-case)]
-                              {:name          normalized-name
-                               :database-type data_type
-                               :base-type     (sql-jdbc.sync/database-type->base-type driver data_type)
-                               :nullable      (= "yes" (str/lower-case is_nullable))
-                               :field-comment ""}))   ;; Default comment placeholder for each field
+      (let [results (jdbc/query {:connection conn}
+                                [(str "SELECT column_name, data_type, is_nullable, ordinal_position"
+                                      " FROM information_schema.columns"
+                                      " WHERE LOWER(table_schema) = LOWER(?) AND LOWER(table_name) = LOWER(?)"
+                                      " ORDER BY ordinal_position")
+                                 schema name]
+                                {:identifiers str/lower-case})
+            fields  (into #{}
+                          (map-indexed
+                           (fn [idx {:keys [column_name data_type]}]
+                             {:name              column_name
+                              :database-type     data_type
+                              :base-type         (sql-jdbc.sync/database-type->base-type driver data_type)
+                              :database-position idx}))
                           results)]
-        (log/info "DESCRIBE query:" query)
-        (log/info "DESCRIBE raw results:" results)
-        (log/info "Parsed fields:" fields)
-        {:name name
+        {:name   name
          :schema schema
          :fields fields})
       (finally
         (safely-close-connection conn)))))
 
 ;; ----------------------------------------------------------------
-;; Define a method to describe table foreign keys.
-;; Since FlightSQL does not support imported keys, this returns an empty set.
-(defmethod driver/describe-table-fks :arrow-flight-sql
-  [_ _ _]
-  ;; Return an empty set so that foreign key synchronization doesn't fail.
-  #{})
+;; NOTE: driver/describe-table-fks is intentionally NOT implemented. The
+;; multimethod was removed in Metabase 0.63 (a defmethod on it would fail the
+;; namespace load there); FK sync is disabled via :metadata/key-constraints
+;; false above. If per-backend FK support is wanted later, implement
+;; sql-jdbc.sync/describe-fks-sql against information_schema instead.
 
 ;; ----------------------------------------------------------------
 ;; Describe fields by querying the information_schema.columns table.
@@ -345,7 +455,9 @@
                [[:inline false] :database-is-auto-increment]
                [[:case-expr [:= :is_nullable [:inline "NO"]] [:inline true] [:inline false]]
                 :database-required]
-               [[:inline ""] :field-comment]]
+               ;; NULL, not "": FieldMetadataEntry requires field-comment to
+               ;; be a non-blank string or nil (enforced by malli in dev/test)
+               [[:inline nil] :field-comment]]
       :from [[:information_schema.columns]]
       :where (vec (cons :and where-clause))
       :order-by [:table_schema :table_name :ordinal_position]}
@@ -463,11 +575,91 @@
   [_]
   :monday)
 
-(defmethod sql.qp/->honeysql
-  ;; inline the two-arg ["absolute-datetime" value _] form
-  [:arrow-flight-sql :absolute-datetime]
-  [_driver [_ value _options]]
-  ;; value is a java.time.LocalDate or LocalDateTime
-  (let [fmt (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss")]
-    ;; embed as raw string literal
-    [:raw (str "'" (.format value fmt) "'")]))
+;; ----------------------------------------------------------------
+;; CSV uploads (writable, DuckDB-flavored backends; gated per connection via
+;; the enable-uploads detail above). The :sql-jdbc parent provides
+;; create-table!/drop-table!/truncate!/insert-into!/add-columns!/
+;; alter-table-columns! — the driver only supplies the type mapping.
+(defmethod driver/upload-type->database-type :arrow-flight-sql
+  [_driver upload-type]
+  (case upload-type
+    :metabase.upload/varchar-255              "VARCHAR"
+    :metabase.upload/text                     "VARCHAR"
+    :metabase.upload/int                      "BIGINT"
+    :metabase.upload/auto-incrementing-int-pk "BIGINT"
+    :metabase.upload/float                    "DOUBLE"
+    :metabase.upload/boolean                  "BOOLEAN"
+    :metabase.upload/date                     "DATE"
+    :metabase.upload/datetime                 "TIMESTAMP"
+    :metabase.upload/offset-datetime          "TIMESTAMP WITH TIME ZONE"))
+
+(defmethod driver/table-name-length-limit :arrow-flight-sql
+  [_driver]
+  ;; DuckDB imposes no practical identifier-length limit
+  nil)
+
+(defmethod driver/allowed-promotions :arrow-flight-sql
+  [_driver]
+  ;; conservative: no implicit column-type relaxation on append/replace
+  {})
+
+(def ^:private ^java.time.format.DateTimeFormatter timestamp-literal-formatter
+  (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))
+
+(def ^:private ^java.time.format.DateTimeFormatter time-literal-formatter
+  (java.time.format.DateTimeFormatter/ofPattern "HH:mm:ss"))
+
+(defn- upload-sql-literal
+  "Render an upload value as a SQL literal. The default :sql-jdbc insert path
+  binds values as JDBC parameters, but the Arrow JDBC driver cannot bind
+  java.time temporals on the plain PreparedStatements uploads use
+  (UnsupportedOperationException: Cannot convert from LocalDate to long) —
+  so values are inlined instead."
+  ^String [v]
+  (cond
+    (nil? v)                     "NULL"
+    (instance? LocalDate v)      (format "DATE '%s'" v)
+    (instance? LocalTime v)      (format "TIME '%s'" (.format ^LocalTime v time-literal-formatter))
+    (instance? LocalDateTime v)  (format "TIMESTAMP '%s'" (.format ^LocalDateTime v timestamp-literal-formatter))
+    ;; DuckDB's TIMESTAMPTZ parses ISO-8601 with offset
+    (instance? OffsetDateTime v) (format "TIMESTAMP WITH TIME ZONE '%s'" v)
+    (boolean? v)                 (if v "TRUE" "FALSE")
+    (number? v)                  (str v)
+    :else                        (str "'" (str/replace (str v) "'" "''") "'")))
+
+(defmethod driver/insert-into! :arrow-flight-sql
+  [driver db-id table-name column-names values]
+  (let [dialect (sql.qp/quote-style driver)
+        chunks  (partition-all (or driver/*insert-chunk-rows* 100) values)]
+    (jdbc/with-db-transaction [conn (sql-jdbc.conn/db->pooled-connection-spec db-id)]
+      (doseq [chunk chunks
+              :let [statement (sql/format
+                               {:insert-into (keyword table-name)
+                                :columns     (mapv keyword column-names)
+                                :values      (mapv (fn [row]
+                                                     (mapv (fn [v] [:raw (upload-sql-literal v)]) row))
+                                                   chunk)}
+                               :quoted true
+                               :dialect dialect)]]
+        (jdbc/execute! conn statement)))))
+
+;; ----------------------------------------------------------------
+;; Inline absolute datetime values as typed SQL literals. Prepared-statement
+;; temporal parameters are not reliably supported across Flight SQL servers,
+;; so literals are safer for filters. The previous implementation formatted
+;; every value with a "yyyy-MM-dd HH:mm:ss" pattern, which throws
+;; UnsupportedTemporalTypeException for date-only (LocalDate) values.
+(defmethod sql.qp/->honeysql [:arrow-flight-sql :absolute-datetime]
+  [_driver [_ value _unit]]
+  (condp instance? value
+    LocalDate      [:raw (format "DATE '%s'" value)]
+    LocalTime      [:raw (format "TIME '%s'" (.format ^LocalTime value time-literal-formatter))]
+    LocalDateTime  [:raw (format "TIMESTAMP '%s'" (.format ^LocalDateTime value timestamp-literal-formatter))]
+    ;; keep the wall-clock time, matching the previous behavior and the
+    ;; TIMESTAMP-without-timezone storage of the demo backends
+    OffsetDateTime [:raw (format "TIMESTAMP '%s'"
+                                 (.format (.toLocalDateTime ^OffsetDateTime value)
+                                          timestamp-literal-formatter))]
+    ;; anything else: let the value flow through as a JDBC parameter
+    ;; (set-parameter impls above cover the common temporal classes)
+    value))

@@ -5,21 +5,40 @@ on:
     branches: [ main ]
   pull_request:
   workflow_dispatch:
+  release:
+    types: [ published ]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Clojure + clj-kondo
+      uses: DeLaGuardo/setup-clojure@12.3
+      with:
+        cli: 1.12.0.1479
+        clj-kondo: 2026.04.15
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Lint driver source
+      run: clj-kondo --lint src
+
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # One build per supported Metabase release line. Keep in sync with the
+        # compatibility table in README.md. 62.x EOLs 2026-09-01.
+        metabase-ref: [ v0.62.5, v0.63.1 ]
 
     steps:
     - name: Clone Metabase repository
       uses: actions/checkout@v4
       with:
         repository: metabase/metabase
-        # Pin to the Metabase version the driver ships against. Building against
-        # an unpinned master breaks whenever upstream restructures modules/drivers
-        # (e.g. sqlite/druid were removed from modules/drivers after v0.62), which
-        # ci/deps.edn still references as :local/root siblings.
-        ref: v0.62.4
+        ref: ${{ matrix.metabase-ref }}
         path: metabase
 
     - name: Checkout driver code
@@ -27,20 +46,16 @@ jobs:
       with:
         path: metabase/modules/drivers/arrow-flight-sql
 
-    - name: List driver files for debugging
-      run: |
-        echo "Listing contents of metabase/modules/drivers/arrow-flight-sql:"
-        ls -R metabase/modules/drivers/
-        ls -R metabase/modules/drivers/arrow-flight-sql
-
-    - name: Register arrow-flight-sql in deps.edn
+    - name: Register arrow-flight-sql as the only driver module
       working-directory: ./metabase
+      # Overwriting with a single-entry map (the pattern the ClickHouse driver
+      # used) is robust across Metabase versions: building one driver does not
+      # need the in-tree driver modules registered, and upstream reshuffles of
+      # modules/drivers (sqlite moved to core, druid removed, ...) can no
+      # longer break us.
       run: |
-        cp modules/drivers/arrow-flight-sql/ci/deps.edn modules/drivers/deps.edn
-        echo "--- Verifying modules/drivers/deps.edn content ---"
+        echo '{:deps {metabase/arrow-flight-sql {:local/root "arrow-flight-sql"}}}' > modules/drivers/deps.edn
         cat modules/drivers/deps.edn
-        echo "----------------------------------------------------"
-
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -61,7 +76,18 @@ jobs:
     - name: Set up Clojure
       uses: DeLaGuardo/setup-clojure@12.3
       with:
-        cli: latest
+        cli: 1.12.0.1479
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Cache Maven + gitlibs
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.m2/repository
+          ~/.gitlibs
+        key: ${{ runner.os }}-driver-${{ matrix.metabase-ref }}-${{ hashFiles('metabase/modules/drivers/arrow-flight-sql/deps.edn', 'metabase/deps.edn') }}
+        restore-keys: |
+          ${{ runner.os }}-driver-${{ matrix.metabase-ref }}-
 
     - name: Build driver
       working-directory: ./metabase
@@ -69,69 +95,115 @@ jobs:
         chmod +x ./bin/build-driver.sh
         ./bin/build-driver.sh arrow-flight-sql
 
+    - name: Rename jar per Metabase line
+      run: |
+        MB_LINE=$(echo "${{ matrix.metabase-ref }}" | sed -E 's/^v0\.([0-9]+).*/mb\1/')
+        mkdir -p out
+        cp metabase/resources/modules/arrow-flight-sql.metabase-driver.jar \
+           "out/arrow-flight-sql.metabase-driver-${MB_LINE}.jar"
+        ls -la out/
+
     - name: Upload driver artifact
       uses: actions/upload-artifact@v4
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       with:
-        name: metabase-arrow-flight-sql-driver
-        path: metabase/resources/modules/arrow-flight-sql.metabase-driver.jar
+        name: metabase-arrow-flight-sql-driver-${{ matrix.metabase-ref }}
+        path: out/*.jar
         if-no-files-found: error
 
-  release:
+  # Runs Metabase's own driver test harness (test extensions under test/)
+  # against a GizmoSQL service, scoped to the driver's test namespace (which
+  # loads the shared test-data dataset through the harness: DDL + INSERT over
+  # Flight SQL, validated sync, MBQL known-answer queries) plus the pure unit
+  # tests for the connection spec builder.
+  driver-test-suite:
     runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: 
-      name: release-approval
-      url: https://github.com/${{ github.repository }}/releases/latest
-    
+    services:
+      gizmosql:
+        image: gizmodata/gizmosql:v1.35.1
+        env:
+          TLS_ENABLED: "0"
+          GIZMOSQL_USERNAME: gizmosql
+          GIZMOSQL_PASSWORD: gizmosql_password
+          SECRET_KEY: ci-test-jwt-signing-key-0123456789abcdef
+          PRINT_QUERIES: "0"
+        ports:
+          - 31337:31337
+
     steps:
+    - name: Clone Metabase repository
+      uses: actions/checkout@v4
+      with:
+        repository: metabase/metabase
+        ref: v0.62.5
+        path: metabase
+
     - name: Checkout driver code
       uses: actions/checkout@v4
+      with:
+        path: metabase/modules/drivers/arrow-flight-sql
 
-    - name: Download build artifact
+    - name: Register driver module and test path
+      working-directory: ./metabase
+      run: |
+        echo '{:deps {metabase/arrow-flight-sql {:local/root "arrow-flight-sql"}}}' > modules/drivers/deps.edn
+        # insert our test dir into the :drivers-dev :extra-paths vector
+        sed -i 's|"modules/drivers/athena/test"|"modules/drivers/arrow-flight-sql/test"\n    "modules/drivers/athena/test"|' deps.edn
+        grep -n "arrow-flight-sql/test" deps.edn
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '21'
+
+    - name: Set up Clojure
+      uses: DeLaGuardo/setup-clojure@12.3
+      with:
+        cli: 1.12.0.1479
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Cache Maven + gitlibs
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.m2/repository
+          ~/.gitlibs
+        key: ${{ runner.os }}-driver-tests-v0.62.5-${{ hashFiles('metabase/deps.edn') }}
+        restore-keys: |
+          ${{ runner.os }}-driver-tests-v0.62.5-
+
+    - name: Run driver test namespace via the shared harness
+      working-directory: ./metabase
+      env:
+        DRIVERS: arrow-flight-sql
+        MB_ARROW_FLIGHT_SQL_TEST_HOST: localhost
+        MB_ARROW_FLIGHT_SQL_TEST_PORT: "31337"
+        MB_ARROW_FLIGHT_SQL_TEST_USER: gizmosql
+        MB_ARROW_FLIGHT_SQL_TEST_PASSWORD: gizmosql_password
+      run: |
+        clojure -X:dev:drivers:drivers-dev:test :only '[metabase.driver.arrow-flight-sql-test]'
+
+  # Releases are created by release-please (merge its release PR on main);
+  # this job then attaches the per-Metabase-line jars to that release.
+  attach-release-assets:
+    runs-on: ubuntu-latest
+    needs: [ lint, build ]
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download build artifacts
       uses: actions/download-artifact@v4
       with:
-        name: metabase-arrow-flight-sql-driver
+        pattern: metabase-arrow-flight-sql-driver-*
+        merge-multiple: true
         path: ./artifacts/
 
-    - name: Create release tag and upload artifact
+    - name: Attach jars to release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Fetch all tags
-        git fetch --tags
-        
-        # Get the latest tag (assume semantic versioning)
-        LATEST_TAG=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-        
-        if [ -z "$LATEST_TAG" ]; then
-          # No existing tags, start with 0.0.1
-          NEW_TAG="0.0.1"
-        else
-          # Extract version parts
-          IFS='.' read -ra VERSION_PARTS <<< "$LATEST_TAG"
-          MAJOR=${VERSION_PARTS[0]}
-          MINOR=${VERSION_PARTS[1]}
-          PATCH=${VERSION_PARTS[2]}
-          
-          # Increment patch version
-          PATCH=$((PATCH + 1))
-          NEW_TAG="$MAJOR.$MINOR.$PATCH"
-        fi
-        
-        # Configure git
-        git config --global user.email "action@github.com"
-        git config --global user.name "GitHub Action"
-        
-        # Create and push tag
-        git tag $NEW_TAG
-        git push origin $NEW_TAG
-        
-        echo "Created tag: $NEW_TAG (previous: $LATEST_TAG)"
-        
-        # Create GitHub Release
-        gh release create $NEW_TAG \
-          --title "Release $NEW_TAG" \
-          --notes "Automated release $NEW_TAG" \
-          ./artifacts/arrow-flight-sql.metabase-driver.jar
+        ls -la ./artifacts/
+        gh release upload "${{ github.event.release.tag_name }}" \
+          ./artifacts/*.jar --clobber --repo "${{ github.repository }}"

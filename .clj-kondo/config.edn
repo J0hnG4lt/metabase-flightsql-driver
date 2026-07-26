@@ -1,0 +1,7 @@
+{;; The Metabase codebase is not on the lint classpath (the driver builds
+ ;; in-tree inside a Metabase checkout), so cross-namespace resolution is
+ ;; disabled. The linter still catches syntax errors, bad arities on local
+ ;; fns, unused bindings/privates, and shadowing.
+ :linters {:unresolved-namespace {:level :off}
+           :unresolved-var       {:level :off}
+           :unresolved-symbol    {:level :off}}}

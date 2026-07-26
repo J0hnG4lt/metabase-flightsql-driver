@@ -12,6 +12,31 @@ My main goal was to allow Metabase to use [Spice.ai OSS](https://spiceai.org/doc
 - Timestamp Conversion: Automatically converts TIMESTAMP columns to local date-time objects.
 - Field Filters: Full support for Metabase field filters including table aliases for JOIN queries.
 
+## Compatibility
+
+CI builds one jar per supported Metabase release line (see release assets):
+
+| Driver release | Metabase | Arrow Flight SQL JDBC |
+|---|---|---|
+| unreleased (main) | v0.62.5 (`-mb62` jar), v0.63.1 (`-mb63` jar) | 19.0.0 |
+| 0.0.9 | v0.62.4 | 18.2.0 |
+| 0.0.5 – 0.0.8 | v0.55 – v0.62 | 18.2.0 |
+
+## Upgrading from 0.0.x
+
+Drop-in: replace the plugin jar (pick the `-mb62`/`-mb63` release asset matching your Metabase line) and restart Metabase. Existing connections keep working — the driver auto-detects legacy details (plain username/password or token) and backfills the new auth toggle on read.
+
+After upgrading, open each Flight SQL connection in **Admin → Databases** and hit **Save** once: this persists the backfilled auth flag and re-validates the connection.
+
+Behavior changes to be aware of:
+
+- **New** connections default to *Use Encryption ON* (previously off). Existing connections keep their stored setting.
+- Tokens entered through the admin UI now actually work (previously only API-created connections could authenticate with tokens).
+- `convertTimezone()` no longer appears in the expression editor — it was advertised but never worked.
+- FK metadata is no longer probed during sync (it always returned nothing anyway); Metabase-side semantic/FK settings are unaffected.
+- Release assets are now named per Metabase line (`arrow-flight-sql.metabase-driver-mb62.jar`, `-mb63.jar`) — update any download automation.
+- Built and tested against Metabase v0.62.5 and v0.63.1; bundles Arrow Flight SQL JDBC 19.0.0.
+
 ## Installation
 
 ### Prerequisites
@@ -74,9 +99,39 @@ The docker-compose file also contains a builder service, so don't worry if you h
 |---------|------|-------------|
 | metabase | 3000 | Metabase BI tool |
 | postgres | 5432 | Metabase application database |
-| spiced | 50051, 8090, 9090 | Spice.ai Flight SQL server |
+| spiced | 50051, 8090, 9090 | Spice.ai Flight SQL server (API-key auth) |
+| spiced-anon | 50052 | Spice.ai without auth (anonymous-connection testing) |
 | gizmosql | 31337 | GizmoSQL Flight SQL server (DuckDB-based) |
+| influxdb3 | 8181 | InfluxDB 3 Core (bearer-token-only; seed via `scripts/setup_influxdb3.py`) |
 | builder | - | Builds the driver JAR |
+
+### Optional TLS/mTLS profile
+
+```bash
+./scripts/generate_tls_certs.sh    # local CA + server cert + mTLS client cert into ./tls/
+podman-compose -f docker-compose.yaml -f docker-compose.tls.yaml up -d
+```
+
+Adds `gizmosql-tls` (31338, CA-signed TLS) and `gizmosql-mtls` (31339, requires client certificates), and mounts `./tls` into Metabase at `/opt/flightsql-tls` so the driver's *Server CA certificate*, *mTLS client certificate/key* fields can reference the files.
+
+### Optional OAuth2 profile (Keycloak)
+
+```bash
+python scripts/generate_oauth_config.py    # deterministic RS256 signing key + Keycloak realm
+podman-compose -f docker-compose.yaml -f docker-compose.oauth.yaml up -d keycloak gizmosql-oauth
+```
+
+Adds Keycloak (host port 8180, realm `flightsql` with client-credentials clients minting `role=admin` and `role=readonly` tokens) and `gizmosql-oauth` (host port 31340; verifies JWT signature/issuer/audience). Connect from Metabase with Username `token` and the OAuth access token as Password — the readonly-role token is SELECT-only.
+
+> Note: GizmoSQL **Core** accepts external JWTs only via that handshake convention. The Arrow JDBC `oauth.*` client-credentials flow fetches and sends the token correctly, but Core's bearer-header path only accepts its own session tokens (external bearer headers are an Enterprise/JWKS capability — or use Dremio).
+
+### CSV uploads (writable backends)
+
+Uploads are double-gated: tick **"Writable backend (enable CSV uploads)"** in the connection's advanced options (only for servers that accept DDL/DML over Flight SQL — GizmoSQL/DuckDB, Doris, StarRocks), then pick the database under **Admin → Settings → Uploads** (schema e.g. `main`). Uploading a CSV creates a typed DuckDB table plus a Metabase model; appends via the table menu work too. Read-only backends (InfluxDB 3, Spice datasets, ROAPI) reject uploads with a clean error even if selected.
+
+### Connecting to InfluxDB 3
+
+Enable the token toggle, paste the admin token (in `.env` as `INFLUXDB3_TOKEN` after seeding), and set **Additional options** to `database=<your-db>` (forwarded as a gRPC header). Tip: add a schema-filters *exclusion* for `system` to keep InfluxDB's internal tables out of sync.
 
 ## Configuration
 
@@ -84,11 +139,16 @@ When setting up the connection in Metabase, the driver registers under the name 
 
 - **Host**: (Default: localhost) – The server's hostname or IP address.
 - **Port**: (Default: 443) – The port to use for the connection.
-- **User**: (Optional) – Username for authentication.
-- **Password**: (Optional) – Password for authentication.
-- **Token**: (Optional) – A secure token for connection (used by Spice.ai).
+- **Authentication** – controlled by the *"Authenticate with a token instead of username/password"* toggle:
+  - *Toggle off (default)*: Username + Password → Flight handshake basic auth (GizmoSQL, Dremio, Doris, StarRocks, Denodo…).
+    - **Spice.ai API key**: leave Username empty, put the key in Password.
+    - **GizmoSQL external JWT**: set Username to the literal `token`, JWT in Password.
+  - *Toggle on*: Bearer token / PAT / API key → sent as `Authorization: Bearer …` (InfluxDB 3 tokens, Dremio PATs, pre-issued JWTs).
+  - *Anonymous*: leave all credential fields blank (ROAPI, kamu, Ballista, Spice.ai without auth).
 - **Catalog**: (Optional) - The name of the catalog to use.
-- **Use Encryption**: (Default: true) – Enable or disable connection encryption.
+- **Advanced**: server CA certificate, mTLS client certificate/key (PEM secrets), connect timeout, and free-form additional JDBC options (`threadPoolSize`, `retainAuth`, `oauth.*` for OAuth 2.0 client-credentials/token-exchange, or any custom parameter — unknown parameters are forwarded to the server as gRPC headers, e.g. `database=<db>` for InfluxDB 3).
+- **Use Encryption**: (Default: true) – Enable or disable TLS. Switch off for local plaintext servers (the docker-compose demo does this explicitly).
+- **Disable Certificate Verification**: (Default: false) – Only enable for servers with self-signed certificates.
 
 ## Project Structure
 
@@ -120,7 +180,12 @@ podman compose up -d
 
 # Wait for Metabase, then run setup
 python scripts/metabase_setup.py
+
+# Run the pytest e2e suite (see tests/e2e/README.md for optional stacks)
+python -m pytest tests/e2e -v
 ```
+
+The suite covers connections/auth shapes, the full connector option matrix, every dashboard card across 11 visualization types, metadata refreshes, MBQL/segments/metrics/pivot, TLS/mTLS, anonymous auth, and InfluxDB 3 (modules auto-skip when their optional stack isn't running).
 
 The setup script creates a test dashboard with:
 - **32 cards** with various chart types (scalar, bar, pie, line, area, table, gauge, funnel, scatter, progress)
@@ -143,6 +208,12 @@ If using Claude Code, run `/e2e-test` for guided end-to-end testing instructions
 
 ## Troubleshooting
 
+### `podman compose` fails with `root@127.0.0.1: Permission denied`
+On Windows with Docker Desktop installed, `podman compose` delegates to
+`docker-compose.exe` (an external compose provider) which tries to reach a
+Docker host over SSH and fails. Use the pip-installed `podman-compose`
+instead: `pip install podman-compose`, then `podman-compose up -d`.
+
 ### Check Metabase logs
 ```bash
 podman logs metabase 2>&1 | tail -100
@@ -163,9 +234,9 @@ podman compose up -d metabase
 
 ## License
 
-Copyright © 2025 Georvic Tur
+Copyright © 2025-2026 Georvic Tur
 
-This project is available under the terms of the Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0), which is the most permissive license possible that is compatible with Flight SQL and Metabase. Additionally, the source code may be distributed under the terms of the Eclipse Public License 2.0 (http://www.eclipse.org/legal/epl-2.0) or the GNU General Public License (GPL) version 2 or later with the GNU Classpath Exception, subject to the conditions specified in the Eclipse Public License.
+Licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [LICENSE](LICENSE).
 
 ## AI-Assisted Development
 
