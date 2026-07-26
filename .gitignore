@@ -33,3 +33,8 @@ __pycache__/
 
 # Generated OAuth test-profile material
 oauth/
+
+# Local probe artifacts
+.oauth-probe-token
+.vscode/
+META-INF/
