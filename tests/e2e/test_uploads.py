@@ -111,6 +111,10 @@ def test_upload_query_append_roundtrip(mb, uploads_on_gizmo):
         mb.req("DELETE", f"/api/card/{model_id}")
         if table_name:
             mb.native(uploads_on_gizmo, f'DROP TABLE IF EXISTS "main"."{table_name}"')
+            # retire the synced metadata too, otherwise a ghost table lingers
+            # in Browse data pointing at a dropped physical table
+            mb.req("PUT", f"/api/table/{table_id}", {"visibility_type": "hidden"})
+            mb.post(f"/api/database/{uploads_on_gizmo}/sync_schema")
 
 
 def test_upload_rejected_on_readonly_backend(mb, uploads_on_gizmo):
