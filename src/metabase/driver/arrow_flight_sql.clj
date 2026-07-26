@@ -112,10 +112,23 @@
          ;; removed describe-table-fks) makes sync call driver/describe-fks,
          ;; whose sql-jdbc fallback reads JDBC DatabaseMetaData — a path that
          ;; NPEs on servers with incomplete GetSqlInfo support.
-         :metadata/key-constraints  false}]
+         :metadata/key-constraints  false
+         ;; DuckDB has neither IDENTITY columns nor implicit rowids for plain
+         ;; INTEGER PKs, so uploaded tables carry no _mb_row_id column (the
+         ;; ClickHouse precedent).
+         :upload-with-auto-pk       false}]
   (defmethod driver/database-supports? [:arrow-flight-sql feature]
     [_driver _feature _db]
     supported?))
+
+;; CSV uploads are opt-in PER CONNECTION: only writable Flight SQL backends
+;; (e.g. GizmoSQL/DuckDB) accept CREATE TABLE / INSERT, while others
+;; (InfluxDB 3, Spice accelerations, ROAPI, kamu, Deephaven) are read-only.
+;; The toggle lives in connection details so read-only backends never
+;; advertise the feature.
+(defmethod driver/database-supports? [:arrow-flight-sql :uploads]
+  [_driver _feature db]
+  (boolean (get-in db [:details :enable-uploads])))
 
 ;; ----------------------------------------------------------------
 ;; Build a connection spec from the provided database details.
@@ -563,17 +576,79 @@
   :monday)
 
 ;; ----------------------------------------------------------------
-;; Inline absolute datetime values as typed SQL literals. Prepared-statement
-;; temporal parameters are not reliably supported across Flight SQL servers,
-;; so literals are safer for filters. The previous implementation formatted
-;; every value with a "yyyy-MM-dd HH:mm:ss" pattern, which throws
-;; UnsupportedTemporalTypeException for date-only (LocalDate) values.
+;; CSV uploads (writable, DuckDB-flavored backends; gated per connection via
+;; the enable-uploads detail above). The :sql-jdbc parent provides
+;; create-table!/drop-table!/truncate!/insert-into!/add-columns!/
+;; alter-table-columns! — the driver only supplies the type mapping.
+(defmethod driver/upload-type->database-type :arrow-flight-sql
+  [_driver upload-type]
+  (case upload-type
+    :metabase.upload/varchar-255              "VARCHAR"
+    :metabase.upload/text                     "VARCHAR"
+    :metabase.upload/int                      "BIGINT"
+    :metabase.upload/auto-incrementing-int-pk "BIGINT"
+    :metabase.upload/float                    "DOUBLE"
+    :metabase.upload/boolean                  "BOOLEAN"
+    :metabase.upload/date                     "DATE"
+    :metabase.upload/datetime                 "TIMESTAMP"
+    :metabase.upload/offset-datetime          "TIMESTAMP WITH TIME ZONE"))
+
+(defmethod driver/table-name-length-limit :arrow-flight-sql
+  [_driver]
+  ;; DuckDB imposes no practical identifier-length limit
+  nil)
+
+(defmethod driver/allowed-promotions :arrow-flight-sql
+  [_driver]
+  ;; conservative: no implicit column-type relaxation on append/replace
+  {})
+
 (def ^:private ^java.time.format.DateTimeFormatter timestamp-literal-formatter
   (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))
 
 (def ^:private ^java.time.format.DateTimeFormatter time-literal-formatter
   (java.time.format.DateTimeFormatter/ofPattern "HH:mm:ss"))
 
+(defn- upload-sql-literal
+  "Render an upload value as a SQL literal. The default :sql-jdbc insert path
+  binds values as JDBC parameters, but the Arrow JDBC driver cannot bind
+  java.time temporals on the plain PreparedStatements uploads use
+  (UnsupportedOperationException: Cannot convert from LocalDate to long) —
+  so values are inlined instead."
+  ^String [v]
+  (cond
+    (nil? v)                     "NULL"
+    (instance? LocalDate v)      (format "DATE '%s'" v)
+    (instance? LocalTime v)      (format "TIME '%s'" (.format ^LocalTime v time-literal-formatter))
+    (instance? LocalDateTime v)  (format "TIMESTAMP '%s'" (.format ^LocalDateTime v timestamp-literal-formatter))
+    ;; DuckDB's TIMESTAMPTZ parses ISO-8601 with offset
+    (instance? OffsetDateTime v) (format "TIMESTAMP WITH TIME ZONE '%s'" v)
+    (boolean? v)                 (if v "TRUE" "FALSE")
+    (number? v)                  (str v)
+    :else                        (str "'" (str/replace (str v) "'" "''") "'")))
+
+(defmethod driver/insert-into! :arrow-flight-sql
+  [driver db-id table-name column-names values]
+  (let [dialect (sql.qp/quote-style driver)
+        chunks  (partition-all (or driver/*insert-chunk-rows* 100) values)]
+    (jdbc/with-db-transaction [conn (sql-jdbc.conn/db->pooled-connection-spec db-id)]
+      (doseq [chunk chunks
+              :let [statement (sql/format
+                               {:insert-into (keyword table-name)
+                                :columns     (mapv keyword column-names)
+                                :values      (mapv (fn [row]
+                                                     (mapv (fn [v] [:raw (upload-sql-literal v)]) row))
+                                                   chunk)}
+                               :quoted true
+                               :dialect dialect)]]
+        (jdbc/execute! conn statement)))))
+
+;; ----------------------------------------------------------------
+;; Inline absolute datetime values as typed SQL literals. Prepared-statement
+;; temporal parameters are not reliably supported across Flight SQL servers,
+;; so literals are safer for filters. The previous implementation formatted
+;; every value with a "yyyy-MM-dd HH:mm:ss" pattern, which throws
+;; UnsupportedTemporalTypeException for date-only (LocalDate) values.
 (defmethod sql.qp/->honeysql [:arrow-flight-sql :absolute-datetime]
   [_driver [_ value _unit]]
   (condp instance? value

@@ -124,6 +124,16 @@ driver:
       visible-if:
         advanced-options: true
 
+    # Only writable backends (GizmoSQL/DuckDB, Doris, StarRocks...) can
+    # accept CSV uploads; read-only servers (InfluxDB 3, Spice accelerations,
+    # ROAPI) must leave this off.
+    - name: enable-uploads
+      display-name: Writable backend (enable CSV uploads)
+      type: boolean
+      default: false
+      visible-if:
+        advanced-options: true
+
     # String (not integer): the manifest linter has no integer type; the
     # driver coerces it.
     - name: connect-timeout-millis

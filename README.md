@@ -125,6 +125,10 @@ Adds Keycloak (host port 8180, realm `flightsql` with client-credentials clients
 
 > Note: GizmoSQL **Core** accepts external JWTs only via that handshake convention. The Arrow JDBC `oauth.*` client-credentials flow fetches and sends the token correctly, but Core's bearer-header path only accepts its own session tokens (external bearer headers are an Enterprise/JWKS capability — or use Dremio).
 
+### CSV uploads (writable backends)
+
+Uploads are double-gated: tick **"Writable backend (enable CSV uploads)"** in the connection's advanced options (only for servers that accept DDL/DML over Flight SQL — GizmoSQL/DuckDB, Doris, StarRocks), then pick the database under **Admin → Settings → Uploads** (schema e.g. `main`). Uploading a CSV creates a typed DuckDB table plus a Metabase model; appends via the table menu work too. Read-only backends (InfluxDB 3, Spice datasets, ROAPI) reject uploads with a clean error even if selected.
+
 ### Connecting to InfluxDB 3
 
 Enable the token toggle, paste the admin token (in `.env` as `INFLUXDB3_TOKEN` after seeding), and set **Additional options** to `database=<your-db>` (forwarded as a gRPC header). Tip: add a schema-filters *exclusion* for `system` to keep InfluxDB's internal tables out of sync.
