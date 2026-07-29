@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.2.0...0.3.0) (2026-07-29)
+
+
+### Features
+
+* Apache Doris test backend (MySQL-dialect Flight SQL) — Linux/CI profile ([854b101](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/854b101f0ab9ad79f5f489ee9542cc78b0491cd9))
+
+
+### Bug Fixes
+
+* **auth:** send user= for username with empty password; add StarRocks backend ([8b62add](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/8b62adde0abaab634a3ded9658d2fe93357e909b))
+
+
+### CI
+
+* e2e workflow that deploys Metabase + tests each backend on Linux ([40599cd](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/40599cdfe8e97773b2c6698b08020a215d08a513))
+* fix e2e runner plumbing (bash for cert script, docker as container CLI) ([4627b28](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/4627b2859eb33892fa22e036935038d755c52033))
+* make Doris/StarRocks opt-in; resilient seeds; document topology limit ([6ddac22](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/6ddac225f0431adc2d5b80ec8eec8fc911b2fb3e))
+* remove temporary branch push trigger from e2e workflow ([e30d560](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/e30d5608618da89e08238ea3378f571bee132bd2))
+* temporary branch push trigger to validate e2e workflow (remove before merge) ([aeb578f](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/aeb578f2ba0c322eea9608f2d0bbb151942b7c0d))
+
 ## [0.2.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.1.0...0.2.0) (2026-07-26)
 
 
