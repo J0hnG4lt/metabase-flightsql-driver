@@ -16,6 +16,11 @@ on:
   push:
     branches: [ feat/doris-backend ]   # TEMPORARY: validate before merge; remove
 
+# The runner has both podman and docker; the compose stack is created with
+# docker, so the setup scripts' container-exec must use docker too.
+env:
+  CONTAINER_CLI: docker
+
 jobs:
   default-backends:
     runs-on: ubuntu-latest
@@ -29,7 +34,7 @@ jobs:
 
       - name: Generate TLS + OAuth profile material
         run: |
-          ./scripts/generate_tls_certs.sh
+          bash scripts/generate_tls_certs.sh
           python scripts/generate_oauth_config.py
 
       - name: Deploy Metabase + backends (base + TLS + OAuth profiles)
