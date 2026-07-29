@@ -18,8 +18,6 @@ on:
         default: false
   schedule:
     - cron: "0 6 * * 1"   # Mondays 06:00 UTC — default backends only
-  push:
-    branches: [ feat/doris-backend ]   # TEMPORARY: validate before merge; remove
 
 # The runner has both podman and docker; the compose stack is created with
 # docker, so the setup scripts' container-exec must use docker too.
