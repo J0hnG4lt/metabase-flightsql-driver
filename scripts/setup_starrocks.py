@@ -12,16 +12,19 @@ under podman-on-Windows. Works when the client shares the host/namespace
 loaded data are confirmed; test_starrocks.py additionally requires the Flight
 SQL endpoint to actually be reachable, so it self-skips where it isn't.
 """
+import os
+import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 CONTAINER = "starrocks"
+CLI = os.environ.get("CONTAINER_CLI") or ("podman" if shutil.which("podman") else "docker")
 
 
 def mysql(sql, stdin=None, timeout=180):
-    args = ["podman", "exec", "-i", CONTAINER,
+    args = [CLI, "exec", "-i", CONTAINER,
             "mysql", "-uroot", "-P9030", "-h127.0.0.1"]
     if stdin is None:
         args += ["-e", sql]

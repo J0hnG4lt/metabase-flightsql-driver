@@ -4,11 +4,15 @@ schemas from doris/init.sql via the FE MySQL port (inside the container).
 Usage: python scripts/setup_doris.py
 Requires the doris service running (docker-compose.doris.yaml).
 """
+import os
+import shutil
 import subprocess
 import sys
 import time
 
 CONTAINER = "doris"
+# podman locally, docker on CI runners (override with CONTAINER_CLI)
+CLI = os.environ.get("CONTAINER_CLI") or ("podman" if shutil.which("podman") else "docker")
 
 
 def sh(*args, timeout=120):
@@ -17,7 +21,7 @@ def sh(*args, timeout=120):
 
 def mysql(sql, timeout=120):
     # the image bundles a mysql client; FE speaks MySQL on 9030
-    return sh("podman", "exec", "-i", CONTAINER,
+    return sh(CLI, "exec", "-i", CONTAINER,
               "mysql", "-uroot", "-P9030", "-h127.0.0.1", "--comments",
               "-e", sql, timeout=timeout)
 
@@ -46,7 +50,7 @@ def main():
 
     init = open("doris/init.sql", encoding="utf-8").read()
     r = subprocess.run(
-        ["podman", "exec", "-i", CONTAINER,
+        [CLI, "exec", "-i", CONTAINER,
          "mysql", "-uroot", "-P9030", "-h127.0.0.1", "--comments"],
         input=init, capture_output=True, text=True, timeout=180)
     if r.returncode != 0:

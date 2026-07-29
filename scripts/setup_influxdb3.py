@@ -5,7 +5,9 @@ and writes sample weather data into the `demo` database.
 
 Usage: python scripts/setup_influxdb3.py
 """
+import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -26,8 +28,11 @@ LINES = "\n".join(
 )
 
 
+CLI = os.environ.get("CONTAINER_CLI") or ("podman" if shutil.which("podman") else "docker")
+
+
 def podman_exec(*args, check=True):
-    return subprocess.run(["podman", "exec", "influxdb3", *args],
+    return subprocess.run([CLI, "exec", "influxdb3", *args],
                           capture_output=True, text=True, check=check)
 
 
