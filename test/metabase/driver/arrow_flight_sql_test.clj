@@ -26,6 +26,11 @@
   (testing "blank username + password (Spice.ai API-key convention)"
     (is (re-find #"user=&password=apikey"
                  (subname {:host "h" :port 1 :use-token false :password "apikey"}))))
+  (testing "username with EMPTY password (Doris/StarRocks root) still sends user"
+    (let [sn (subname {:host "h" :port 1 :use-token false :username "root" :password ""})]
+      (is (re-find #"user=root" sn))
+      (is (re-find #"password=" sn))
+      (is (not (re-find #"authorization" sn)))))
   (testing "bearer token"
     (is (re-find #"authorization=Bearer%20tok"
                  (subname {:host "h" :port 1 :use-token true :token "tok"}))))

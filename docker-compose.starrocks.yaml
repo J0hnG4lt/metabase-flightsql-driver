@@ -1,0 +1,35 @@
+# Apache StarRocks test profile — a second MySQL-dialect Flight SQL backend
+# (StarRocks forked from the Doris/Palo lineage; same FE + C++ BE split).
+# Usage:
+#   podman machine ssh "sudo sysctl -w vm.max_map_count=2000000 && sudo swapoff -a"
+#   podman-compose -f docker-compose.yaml -f docker-compose.starrocks.yaml up -d starrocks
+#   python scripts/setup_starrocks.py     # waits for a live BE, loads sample schemas
+#
+# StarRocks' official all-in-one image is purpose-built for single-container
+# local use (director/feproxy-orchestrated FE+BE) and is more robust than
+# Doris's all-in-one. Flight SQL (StarRocks >= 3.5.1) is disabled by default,
+# so we append arrow_flight_port to fe.conf (9408) and be.conf (9419) before
+# start. Metabase connects to the FE Flight SQL port (starrocks:9408) with
+# root / empty password and additional-options useServerPrepStmts=false.
+services:
+  starrocks:
+    image: starrocks/allin1-ubuntu:3.5.20
+    container_name: starrocks
+    hostname: starrocks
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      # The FE advertises its Flight SQL data endpoint using priority_networks;
+      # the all-in-one entrypoint hardcodes 127.0.0.1/32, which is unreachable
+      # from other containers (Metabase then hits "Connection refused
+      # 127.0.0.1:9408"). Rewrite the entrypoint to advertise the compose
+      # subnet instead, so the FE hands back its own reachable container IP.
+      - |
+        echo "arrow_flight_port = 9408" >> /data/deploy/starrocks/fe/conf/fe.conf
+        echo "arrow_flight_port = 9419" >> /data/deploy/starrocks/be/conf/be.conf
+        cd /data/deploy && exec bash entrypoint.sh
+    ports:
+      - "9030:9030"   # FE MySQL protocol (load init.sql)
+      - "9408:9408"   # FE Arrow Flight SQL (clients connect here)
+      - "8030:8030"   # FE HTTP
+    networks:
+      - metanet1

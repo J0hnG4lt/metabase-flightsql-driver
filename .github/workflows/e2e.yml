@@ -1,0 +1,171 @@
+name: e2e (backends)
+
+# Deploys Metabase + the driver via the repo's compose/scripts on a Linux
+# runner, then runs the pytest e2e suite per backend. Heavy — runs weekly and
+# on demand, not on every PR (build.yaml + the driver-test-suite cover PRs).
+#
+# The default job exercises every backend that works out of the box
+# (GizmoSQL, Spice.ai, InfluxDB 3, quack-on-demand) plus the TLS/mTLS and
+# OAuth profiles. Doris and StarRocks get their own experimental jobs
+# (continue-on-error) because their all-in-one images have FE<->BE quirks
+# that don't reliably serve Flight SQL results in containers.
+on:
+  workflow_dispatch:
+    inputs:
+      run_heavy_backends:
+        description: "Also run the Doris/StarRocks jobs (heavy, all-in-one Flight SQL endpoint is unreachable from a separate Metabase container — expected to fail unless colocated)"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC — default backends only
+
+# The runner has both podman and docker; the compose stack is created with
+# docker, so the setup scripts' container-exec must use docker too.
+env:
+  CONTAINER_CLI: docker
+
+jobs:
+  default-backends:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest requests
+
+      - name: Generate TLS + OAuth profile material
+        run: |
+          bash scripts/generate_tls_certs.sh
+          python scripts/generate_oauth_config.py
+
+      - name: Deploy Metabase + backends (base + TLS + OAuth profiles)
+        run: |
+          docker compose \
+            -f docker-compose.yaml \
+            -f docker-compose.tls.yaml \
+            -f docker-compose.oauth.yaml \
+            up -d --build
+
+      - name: Wait for Metabase health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/api/health >/dev/null; then echo "healthy"; exit 0; fi
+            sleep 10
+          done
+          echo "Metabase did not become healthy"; docker compose logs metabase | tail -50; exit 1
+
+      - name: Seed connections, dashboards, data
+        # metabase_setup is required (gizmo + spice + dashboards); the InfluxDB
+        # and quack seeds are best-effort so a single flaky backend doesn't
+        # block the rest of the suite (their tests skip/fail in isolation).
+        run: |
+          python scripts/metabase_setup.py
+          python scripts/setup_influxdb3.py || echo "::warning::influxdb3 seed failed; its tests will skip/fail"
+          python scripts/provision_quack_dashboard.py || echo "::warning::quack provisioning failed; its tests will skip/fail"
+
+      - name: Run e2e suite
+        run: python -m pytest tests/e2e -v --tb=short
+        # TLS/OAuth run; Doris/StarRocks auto-skip (their profiles aren't up here)
+
+      - name: Metabase logs on failure
+        if: failure()
+        run: docker compose logs metabase | tail -100
+
+  doris:
+    # Opt-in only (never on the weekly schedule): the all-in-one image's FE
+    # advertises its Flight SQL endpoint as 127.0.0.1, which a separate
+    # Metabase container cannot reach — confirmed on both Linux and
+    # podman-on-Windows. Kept for manual investigation / future colocation.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_heavy_backends
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest requests
+
+      - name: Doris host prerequisites (BE)
+        run: |
+          sudo sysctl -w vm.max_map_count=2000000
+          sudo swapoff -a
+
+      - name: Deploy Metabase (minimal) + Doris
+        # --no-deps keeps Spice/GizmoSQL out of this heavy job; the metabase
+        # service's own command waits for the builder to produce the jar.
+        run: |
+          docker compose up -d --build --no-deps postgres builder metabase
+          docker compose -f docker-compose.yaml -f docker-compose.doris.yaml up -d doris
+
+      - name: Wait for Metabase health
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/api/health >/dev/null && { echo healthy; exit 0; }
+            sleep 10
+          done
+          docker compose logs metabase | tail -50; exit 1
+
+      - name: Bootstrap + seed Doris
+        run: |
+          python scripts/ci_bootstrap.py
+          python scripts/setup_doris.py
+
+      - name: Run Doris tests
+        run: python -m pytest tests/e2e/test_doris.py -v --tb=short
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker compose logs metabase | tail -60
+          docker logs doris 2>&1 | tail -60 || true
+
+  starrocks:
+    # Opt-in only (see the doris job). StarRocks' BE comes alive and loads
+    # data, but the FE advertises 127.0.0.1:9408 for results — unreachable
+    # from a separate Metabase container on any host.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_heavy_backends
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest requests
+
+      - name: StarRocks host prerequisites (BE)
+        run: |
+          sudo sysctl -w vm.max_map_count=2000000
+          sudo swapoff -a
+
+      - name: Deploy Metabase (minimal) + StarRocks
+        run: |
+          docker compose up -d --build --no-deps postgres builder metabase
+          docker compose -f docker-compose.yaml -f docker-compose.starrocks.yaml up -d starrocks
+
+      - name: Wait for Metabase health
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/api/health >/dev/null && { echo healthy; exit 0; }
+            sleep 10
+          done
+          docker compose logs metabase | tail -50; exit 1
+
+      - name: Bootstrap + seed StarRocks
+        run: |
+          python scripts/ci_bootstrap.py
+          python scripts/setup_starrocks.py
+
+      - name: Run StarRocks tests
+        run: python -m pytest tests/e2e/test_starrocks.py -v --tb=short
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker compose logs metabase | tail -60
+          docker logs starrocks 2>&1 | tail -60 || true

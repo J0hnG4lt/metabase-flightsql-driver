@@ -153,6 +153,32 @@ Adds Keycloak (host port 8180, realm `flightsql` with client-credentials clients
 
 > Note: GizmoSQL **Core** accepts external JWTs only via that handshake convention. The Arrow JDBC `oauth.*` client-credentials flow fetches and sends the token correctly, but Core's bearer-header path only accepts its own session tokens (external bearer headers are an Enterprise/JWKS capability — or use Dremio).
 
+### Optional Apache Doris profile (MySQL-dialect backend)
+
+Doris is the first **MySQL-dialect** Flight SQL backend in the test matrix (all
+others are DuckDB/DataFusion-flavored) and the only one supporting `SET ROLE`
+and full DDL/DML writes — the target for connection impersonation and the canary
+for SQL-dialect divergence.
+
+```bash
+# host prerequisites for the Doris BE (a C++ process):
+podman machine ssh "sudo sysctl -w vm.max_map_count=2000000 && sudo swapoff -a"
+
+podman-compose -f docker-compose.yaml -f docker-compose.doris.yaml up -d doris
+python scripts/setup_doris.py     # waits for a live BE, loads sample schemas
+```
+
+Connect from Metabase with **host `doris`, port `8070`, user `root`, empty
+password**, and **Additional options `useServerPrepStmts=false`** (required —
+Arrow Flight SQL + Doris don't support prepared-statement parameters). Doris
+"databases" appear as Metabase schemas (`sales`, `hr`, `analytics`).
+
+> **Known limitation:** the Doris BE does not become usable under
+> podman-on-Windows (WSL2/Hyper-V) — the BE's heartbeat service never reaches the
+> FE. The FE (Java) is fine; the backend simply never goes "alive". Run this
+> profile on **native Linux** (or Linux CI). The pytest suite auto-skips Doris
+> unless `scripts/setup_doris.py` confirmed it's usable (`DORIS_READY` gate).
+
 ### CSV uploads (writable backends)
 
 Uploads are double-gated: tick **"Writable backend (enable CSV uploads)"** in the connection's advanced options (only for servers that accept DDL/DML over Flight SQL — GizmoSQL/DuckDB, Doris, StarRocks), then pick the database under **Admin → Settings → Uploads** (schema e.g. `main`). Uploading a CSV creates a typed DuckDB table plus a Metabase model; appends via the table menu work too. Read-only backends (InfluxDB 3, Spice datasets, ROAPI) reject uploads with a clean error even if selected.
