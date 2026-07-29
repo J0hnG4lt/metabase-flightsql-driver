@@ -11,8 +11,13 @@ name: e2e (backends)
 # that don't reliably serve Flight SQL results in containers.
 on:
   workflow_dispatch:
+    inputs:
+      run_heavy_backends:
+        description: "Also run the Doris/StarRocks jobs (heavy, all-in-one Flight SQL endpoint is unreachable from a separate Metabase container — expected to fail unless colocated)"
+        type: boolean
+        default: false
   schedule:
-    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC — default backends only
   push:
     branches: [ feat/doris-backend ]   # TEMPORARY: validate before merge; remove
 
@@ -54,10 +59,13 @@ jobs:
           echo "Metabase did not become healthy"; docker compose logs metabase | tail -50; exit 1
 
       - name: Seed connections, dashboards, data
+        # metabase_setup is required (gizmo + spice + dashboards); the InfluxDB
+        # and quack seeds are best-effort so a single flaky backend doesn't
+        # block the rest of the suite (their tests skip/fail in isolation).
         run: |
           python scripts/metabase_setup.py
-          python scripts/setup_influxdb3.py
-          python scripts/provision_quack_dashboard.py
+          python scripts/setup_influxdb3.py || echo "::warning::influxdb3 seed failed; its tests will skip/fail"
+          python scripts/provision_quack_dashboard.py || echo "::warning::quack provisioning failed; its tests will skip/fail"
 
       - name: Run e2e suite
         run: python -m pytest tests/e2e -v --tb=short
@@ -68,8 +76,13 @@ jobs:
         run: docker compose logs metabase | tail -100
 
   doris:
+    # Opt-in only (never on the weekly schedule): the all-in-one image's FE
+    # advertises its Flight SQL endpoint as 127.0.0.1, which a separate
+    # Metabase container cannot reach — confirmed on both Linux and
+    # podman-on-Windows. Kept for manual investigation / future colocation.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_heavy_backends
     runs-on: ubuntu-latest
-    continue-on-error: true   # experimental: containerized Doris FE<->BE is flaky
+    continue-on-error: true
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -113,8 +126,12 @@ jobs:
           docker logs doris 2>&1 | tail -60 || true
 
   starrocks:
+    # Opt-in only (see the doris job). StarRocks' BE comes alive and loads
+    # data, but the FE advertises 127.0.0.1:9408 for results — unreachable
+    # from a separate Metabase container on any host.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_heavy_backends
     runs-on: ubuntu-latest
-    continue-on-error: true   # experimental: containerized StarRocks FE->BE result proxy is flaky
+    continue-on-error: true
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
