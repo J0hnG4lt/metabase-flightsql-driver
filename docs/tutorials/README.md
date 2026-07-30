@@ -27,7 +27,7 @@ this repo, so the steps are runnable, not hypothetical.
 | Use case | Tutorial | Dremio | Spice.ai | GizmoSQL | InfluxDB 3 | quack | Doris/SR |
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|
 | Iceberg lakehouse (read/write) | ✅ [iceberg-lakehouse](iceberg-lakehouse.md) | ★ | ✓ | ✓ | | | |
-| Transformations inside Metabase | transformations-in-metabase *(planned)* | ✓ | | ★ | | | ✓ |
+| Transformations inside Metabase | ✅ [transformations-in-metabase](transformations-in-metabase.md) | ✓ | | ★ | | | ✓ |
 | Caching / query acceleration | caching-acceleration *(planned)* | | ★ | | | | |
 | Real-time / CDC / live OLAP | realtime-analytics *(planned)* | | ★ | | ✓ | | ✓ |
 | CSV uploads → typed model | csv-uploads *(planned)* | ✓ | | ★ | | | ✓ |
@@ -39,8 +39,9 @@ this repo, so the steps are runnable, not hypothetical.
 
 ★ = the backend the tutorial is built around · ✓ = also works · ✅ = tutorial complete
 
-> The **Iceberg lakehouse** tutorial is complete (with screenshots). The rest are
-> being written — each is generated end-to-end from a live PoC via the
+> The **Iceberg lakehouse** and **Transformations inside Metabase** tutorials are
+> complete (with screenshots). The rest are being written — each is generated
+> end-to-end from a live PoC via the
 > [`tutorial-generator`](../../.claude/skills/tutorial-generator/SKILL.md) skill.
 
 ## Connection quick-reference
