@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       run_heavy_backends:
-        description: "Also run the Doris/StarRocks jobs (heavy, all-in-one Flight SQL endpoint is unreachable from a separate Metabase container — expected to fail unless colocated)"
+        description: "Also run the heavy backend jobs — Dremio (expected to PASS: reads Iceberg over Flight SQL) and Doris/StarRocks (expected to FAIL: all-in-one images advertise an unreachable 127.0.0.1 Flight endpoint from a separate container)"
         type: boolean
         default: false
   schedule:
@@ -169,3 +169,47 @@ jobs:
         run: |
           docker compose logs metabase | tail -60
           docker logs starrocks 2>&1 | tail -60 || true
+
+  dremio:
+    # Opt-in (heavy: ~4 GB RAM, ~1-2 min first boot) but EXPECTED TO PASS.
+    # Single-node Dremio is one JVM that serves Flight SQL results inline, so —
+    # unlike Doris/StarRocks — it is reachable from a separate Metabase
+    # container. NOT continue-on-error: a failure here is a real regression.
+    # Reads/writes Apache Iceberg (Dremio's default table format), so it is also
+    # the suite's Iceberg-over-Flight-SQL proof.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_heavy_backends
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest requests
+
+      - name: Deploy Metabase (minimal) + Dremio
+        run: |
+          docker compose up -d --build --no-deps postgres builder metabase
+          docker compose -f docker-compose.yaml -f docker-compose.dremio.yaml up -d dremio
+
+      - name: Wait for Metabase health
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/api/health >/dev/null && { echo healthy; exit 0; }
+            sleep 10
+          done
+          docker compose logs metabase | tail -50; exit 1
+
+      - name: Bootstrap Metabase + seed Dremio (admin, source, Iceberg tables, PAT)
+        run: |
+          python scripts/ci_bootstrap.py
+          python scripts/setup_dremio.py
+
+      - name: Run Dremio tests
+        run: python -m pytest tests/e2e/test_dremio.py -v --tb=short
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker compose logs metabase | tail -60
+          docker logs dremio 2>&1 | tail -80 || true

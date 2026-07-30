@@ -133,6 +133,8 @@ The docker-compose file also contains a builder service, so don't worry if you h
 | influxdb3 | 8181 | InfluxDB 3 Core (bearer-token-only; seed via `scripts/setup_influxdb3.py`) |
 | builder | - | Builds the driver JAR |
 
+Optional overlay profiles (not in the default stack): **TLS/mTLS**, **OAuth2/Keycloak**, **Doris**, **StarRocks**, and **Dremio** (`docker-compose.dremio.yaml`, port `9047` UI / `32010` Flight SQL — the Apache Iceberg backend).
+
 ### Optional TLS/mTLS profile
 
 ```bash
@@ -178,6 +180,27 @@ Arrow Flight SQL + Doris don't support prepared-statement parameters). Doris
 > FE. The FE (Java) is fine; the backend simply never goes "alive". Run this
 > profile on **native Linux** (or Linux CI). The pytest suite auto-skips Doris
 > unless `scripts/setup_doris.py` confirmed it's usable (`DORIS_READY` gate).
+
+### Optional Dremio profile (Apache Iceberg lakehouse)
+
+Dremio is a native lakehouse engine that speaks Arrow Flight SQL and stores
+tables as **Apache Iceberg** — so this profile is how the suite proves Metabase
+can read (and write) Iceberg through the driver. Unlike Doris/StarRocks,
+single-node Dremio is **one JVM that serves Flight results inline** (no
+advertised `127.0.0.1` endpoint), so it works from a separate Metabase container
+on any host — including podman-on-Windows.
+
+```bash
+podman-compose -f docker-compose.yaml -f docker-compose.dremio.yaml up -d dremio
+python scripts/setup_dremio.py    # bootstraps admin, adds an Iceberg source, seeds tables + a PAT
+```
+
+Connect from Metabase with **host `dremio`, port `32010`, user `dremio`, password
+`dremio123`** (or toggle the token option on and paste the **Personal Access
+Token** from `.env` as `DREMIO_PAT`). The seeded Iceberg tables surface as schemas
+`wh.sales` / `wh.hr` / `wh.analytics`. Dremio wants ~4 GB RAM and ~1–2 min to
+boot; the pytest suite auto-skips it unless `scripts/setup_dremio.py` succeeded
+(`DREMIO_READY` gate).
 
 ### CSV uploads (writable backends)
 
