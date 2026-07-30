@@ -1,0 +1,50 @@
+# Dremio (OSS) test profile — a native lakehouse query engine that speaks
+# Arrow Flight SQL directly on port 32010, with first-class Apache Iceberg
+# support. Unlike Doris/StarRocks (a Java FE + a separate C++ BE whose
+# all-in-one image advertises a 127.0.0.1 Flight endpoint), Dremio single-node
+# is ONE pure-JVM process that serves Flight SQL results on the same
+# connection — so it works from a separate Metabase container on any host
+# (podman-on-Windows AND Linux/CI), which is why it is NOT continue-on-error.
+#
+# Usage:
+#   docker compose -f docker-compose.yaml -f docker-compose.dremio.yaml up -d dremio
+#   python scripts/setup_dremio.py        # bootstraps admin, seeds Iceberg tables
+#
+# Metabase connects to dremio:32010 with:
+#   - username/password  (dremio / dremio123)         -> both-present auth branch
+#   - a Personal Access Token as a Bearer (use-token) -> authorization=Bearer branch
+#
+# The setup script creates Iceberg tables via CTAS into a writable NAS source
+# (`wh` -> /warehouse) across three folders (sales/hr/analytics) so they
+# surface as Metabase schemas; ./data (the shared parquet) is mounted read-only
+# as a second source for a plain-file query path.
+#
+# Dremio wants ~4 GB RAM; the extra-opts below cap heap+direct so it fits a
+# 7 GB CI runner. Heavy/optional profile — not part of the default stack.
+services:
+  dremio:
+    image: dremio/dremio-oss:26.0.5
+    container_name: dremio
+    hostname: dremio
+    environment:
+      # Cap memory so a single-node Dremio fits a small CI runner. Dremio splits
+      # heap (planning/UI) from off-heap direct memory (Arrow buffers); size both.
+      DREMIO_JAVA_SERVER_EXTRA_OPTS: >-
+        -Xms1024m -Xmx3072m -XX:MaxDirectMemorySize=3072m
+    volumes:
+      # Writable Iceberg warehouse for CTAS — a NAMED VOLUME (ext4 inside the
+      # podman/Docker VM), NOT a host bind mount. Dremio's Hadoop-based Parquet
+      # writer calls setPermission() on the files it writes, which fails on a
+      # Windows drvfs bind mount ("RawLocalFileSystem.setPermission"). A named
+      # volume honors POSIX permissions on every host (setup_dremio.py chmods it
+      # for the dremio uid on start).
+      - dremio-warehouse:/warehouse
+    ports:
+      - "9047:9047"    # Web UI + REST API (bootstrap/seed via scripts/setup_dremio.py)
+      - "32010:32010"  # Arrow Flight SQL (clients/Metabase connect here)
+      - "31010:31010"  # legacy Dremio JDBC (not used by this driver; handy for debugging)
+    networks:
+      - metanet1
+
+volumes:
+  dremio-warehouse:

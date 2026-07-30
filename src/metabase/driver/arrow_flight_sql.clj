@@ -384,10 +384,16 @@
         ;; params on information_schema queries return zero rows on some
         ;; Flight SQL servers (Spice/DataFusion, quack-on-demand) even though
         ;; they work on GizmoSQL.
+        ;; `tables` is a reserved word in Dremio's SQL parser, so the table
+        ;; name is quoted: `information_schema."tables"`. The quoted form is
+        ;; equivalent on the case-insensitive engines (verified on GizmoSQL/
+        ;; DuckDB and Spice/DataFusion) and required on Dremio — without it
+        ;; Dremio rejects the sync query ("Encountered '. tables'") and no
+        ;; tables are discovered.
         sql+args (if catalog
-                   [(format "SELECT table_name, table_schema FROM information_schema.tables WHERE LOWER(table_catalog) = LOWER('%s')"
+                   [(format "SELECT table_name, table_schema FROM information_schema.\"tables\" WHERE LOWER(table_catalog) = LOWER('%s')"
                             (str/replace catalog "'" "''"))]
-                   ["SELECT table_name, table_schema FROM information_schema.tables"])
+                   ["SELECT table_name, table_schema FROM information_schema.\"tables\""])
         excluded (sql-jdbc.sync/excluded-schemas driver)
         conn     (jdbc/get-connection spec)]
     (try
