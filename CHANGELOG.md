@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.3.0...0.4.0) (2026-07-30)
+
+
+### Features
+
+* Dremio backend — Apache Iceberg over Flight SQL + sync-query dialect fix ([c4b85e1](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/c4b85e16b86f0fc513cd7e9429df9e019b4b93bf))
+
 ## [0.3.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.2.0...0.3.0) (2026-07-29)
 
 
