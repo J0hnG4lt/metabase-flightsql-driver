@@ -28,7 +28,7 @@ this repo, so the steps are runnable, not hypothetical.
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|
 | Iceberg lakehouse (read/write) | ✅ [iceberg-lakehouse](iceberg-lakehouse.md) | ★ | ✓ | ✓ | | | |
 | Transformations inside Metabase | ✅ [transformations-in-metabase](transformations-in-metabase.md) | ✓ | | ★ | | | ✓ |
-| Caching / query acceleration | caching-acceleration *(planned)* | | ★ | | | | |
+| Caching / query acceleration | ✅ [caching-acceleration](caching-acceleration.md) | | ★ | | | | |
 | Real-time / CDC / live OLAP | realtime-analytics *(planned)* | | ★ | | ✓ | | ✓ |
 | CSV uploads → typed model | ✅ [csv-uploads](csv-uploads.md) | ✓ | | ★ | | | ✓ |
 | Federation / semantic layer | federation-semantic-layer *(planned)* | ★ | ★ | | | | |
