@@ -34,7 +34,7 @@ this repo, so the steps are runnable, not hypothetical.
 | Federation / semantic layer | ✅ [federation-semantic-layer](federation-semantic-layer.md) | ★ | ★ | | | | |
 | Time-series analytics | timeseries *(planned)* | | ✓ | | ★ | | |
 | Local / embedded (Parquet, no warehouse) | ✅ [local-embedded-analytics](local-embedded-analytics.md) | | | ★ | | ✓ | |
-| Write-back / actions | writeback-actions *(planned)* | ✓ | | ✓ | | | ✓ |
+| Write-back / actions | ✅ [writeback-actions](writeback-actions.md) | ✓ | | ✓ | | | ✓ |
 | Every authentication mode | auth-cookbook *(planned)* | user/pass | API-key, anon | user/pass, JWT, mTLS, OAuth | bearer | tenant/pool | user/pass |
 
 ★ = the backend the tutorial is built around · ✓ = also works · ✅ = tutorial complete
