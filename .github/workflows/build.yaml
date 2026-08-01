@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# The Metabase version the released jar is BUILT against. One jar per release
+# (the community norm — see README "Compatibility"). Bump this when you target a
+# newer Metabase line; the compat-smoke job proves which versions it loads on.
+env:
+  MB_BUILD_REF: v0.63.1.6
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -22,21 +28,16 @@ jobs:
     - name: Lint driver source
       run: clj-kondo --lint src
 
+  # Build ONE jar, against MB_BUILD_REF. Same artifact users download and CI
+  # smoke-tests across Metabase versions below.
   build:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # One build per supported Metabase release line. Keep in sync with the
-        # compatibility table in README.md. 62.x EOLs 2026-09-01.
-        metabase-ref: [ v0.62.5, v0.63.1.6 ]
-
     steps:
     - name: Clone Metabase repository
       uses: actions/checkout@v4
       with:
         repository: metabase/metabase
-        ref: ${{ matrix.metabase-ref }}
+        ref: ${{ env.MB_BUILD_REF }}
         path: metabase
 
     - name: Checkout driver code
@@ -46,11 +47,9 @@ jobs:
 
     - name: Register arrow-flight-sql as the only driver module
       working-directory: ./metabase
-      # Overwriting with a single-entry map (the pattern the ClickHouse driver
-      # used) is robust across Metabase versions: building one driver does not
-      # need the in-tree driver modules registered, and upstream reshuffles of
-      # modules/drivers (sqlite moved to core, druid removed, ...) can no
-      # longer break us.
+      # Single-entry map (the ClickHouse-driver pattern): building one driver
+      # doesn't need the in-tree driver modules, and upstream reshuffles of
+      # modules/drivers can't break us.
       run: |
         echo '{:deps {metabase/arrow-flight-sql {:local/root "arrow-flight-sql"}}}' > modules/drivers/deps.edn
         cat modules/drivers/deps.edn
@@ -83,9 +82,9 @@ jobs:
         path: |
           ~/.m2/repository
           ~/.gitlibs
-        key: ${{ runner.os }}-driver-${{ matrix.metabase-ref }}-${{ hashFiles('metabase/modules/drivers/arrow-flight-sql/deps.edn', 'metabase/deps.edn') }}
+        key: ${{ runner.os }}-driver-${{ env.MB_BUILD_REF }}-${{ hashFiles('metabase/modules/drivers/arrow-flight-sql/deps.edn', 'metabase/deps.edn') }}
         restore-keys: |
-          ${{ runner.os }}-driver-${{ matrix.metabase-ref }}-
+          ${{ runner.os }}-driver-${{ env.MB_BUILD_REF }}-
 
     - name: Build driver
       working-directory: ./metabase
@@ -93,26 +92,89 @@ jobs:
         chmod +x ./bin/build-driver.sh
         ./bin/build-driver.sh arrow-flight-sql
 
-    - name: Rename jar per Metabase line
+    - name: Collect the jar
       run: |
-        MB_LINE=$(echo "${{ matrix.metabase-ref }}" | sed -E 's/^v0\.([0-9]+).*/mb\1/')
         mkdir -p out
-        cp metabase/resources/modules/arrow-flight-sql.metabase-driver.jar \
-           "out/arrow-flight-sql.metabase-driver-${MB_LINE}.jar"
+        cp metabase/resources/modules/arrow-flight-sql.metabase-driver.jar out/
         ls -la out/
 
     - name: Upload driver artifact
       uses: actions/upload-artifact@v4
       with:
-        name: metabase-arrow-flight-sql-driver-${{ matrix.metabase-ref }}
-        path: out/*.jar
+        name: metabase-arrow-flight-sql-driver
+        path: out/arrow-flight-sql.metabase-driver.jar
         if-no-files-found: error
 
-  # Runs Metabase's own driver test harness (test extensions under test/)
-  # against a GizmoSQL service, scoped to the driver's test namespace (which
-  # loads the shared test-data dataset through the harness: DDL + INSERT over
-  # Flight SQL, validated sync, MBQL known-answer queries) plus the pure unit
-  # tests for the connection spec builder.
+  # Prove the single jar actually LOADS and works on each Metabase version we
+  # claim: drop it into the official image, boot, register a GizmoSQL
+  # connection, sync, and query. This is what makes the README compatibility
+  # table evidence rather than a guess.
+  compat-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ !matrix.required }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Built against this line → must pass.
+          - metabase: v0.63.1.6
+            jdk_unsafe: "--sun-misc-unsafe-memory-access=allow --enable-native-access=ALL-UNNAMED"
+            required: true
+          # Older line, informational (0.62 EOLs 2026-09-01; JDK 21 → no Unsafe flag).
+          - metabase: v0.62.5
+            jdk_unsafe: ""
+            required: false
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - run: pip install requests
+
+    - name: Download the driver jar
+      uses: actions/download-artifact@v4
+      with:
+        name: metabase-arrow-flight-sql-driver
+        path: ./jar
+
+    - name: Boot Metabase ${{ matrix.metabase }} with the driver + a GizmoSQL backend
+      run: |
+        set -euo pipefail
+        docker network create mbnet
+        docker run -d --name gizmosql --network mbnet \
+          -e TLS_ENABLED=0 -e GIZMOSQL_USERNAME=gizmosql -e GIZMOSQL_PASSWORD=gizmosql_password \
+          -e SECRET_KEY=ci-smoke-key-0123456789abcdef -e DATABASE_FILENAME=:memory: \
+          -e INIT_SQL_COMMANDS_FILE=/opt/gizmosql/init.sql \
+          -v "$PWD/gizmosql/init.sql:/opt/gizmosql/init.sql:ro" \
+          gizmodata/gizmosql:v1.35.1
+        docker run -d --name metabase --network mbnet -p 3000:3000 \
+          -e JAVA_OPTS="--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true ${{ matrix.jdk_unsafe }}" \
+          -v "$PWD/jar/arrow-flight-sql.metabase-driver.jar:/plugins/arrow-flight-sql.metabase-driver.jar:ro" \
+          metabase/metabase:${{ matrix.metabase }}
+
+    - name: Wait for Metabase health
+      run: |
+        for i in $(seq 1 60); do
+          curl -sf http://localhost:3000/api/health >/dev/null && { echo healthy; exit 0; }
+          sleep 5
+        done
+        docker logs metabase 2>&1 | tail -60; exit 1
+
+    - name: Smoke-test — driver loads, connects, queries
+      run: |
+        python scripts/ci_bootstrap.py
+        python scripts/compat_smoke.py
+
+    - name: Logs on failure
+      if: failure()
+      run: |
+        docker logs metabase 2>&1 | tail -100 || true
+        docker logs gizmosql 2>&1 | tail -40 || true
+
+  # Metabase's own driver test harness (test extensions under test/) against a
+  # GizmoSQL service — DDL + INSERT over Flight SQL, validated sync, MBQL
+  # known-answer queries — plus the pure unit tests for the spec builder.
   driver-test-suite:
     runs-on: ubuntu-latest
     services:
