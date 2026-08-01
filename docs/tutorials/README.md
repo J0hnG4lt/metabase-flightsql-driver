@@ -31,7 +31,7 @@ this repo, so the steps are runnable, not hypothetical.
 | Caching / query acceleration | ✅ [caching-acceleration](caching-acceleration.md) | | ★ | | | | |
 | Real-time / CDC / live OLAP | realtime-analytics *(planned)* | | ★ | | ✓ | | ✓ |
 | CSV uploads → typed model | ✅ [csv-uploads](csv-uploads.md) | ✓ | | ★ | | | ✓ |
-| Federation / semantic layer | federation-semantic-layer *(planned)* | ★ | ★ | | | | |
+| Federation / semantic layer | ✅ [federation-semantic-layer](federation-semantic-layer.md) | ★ | ★ | | | | |
 | Time-series analytics | timeseries *(planned)* | | ✓ | | ★ | | |
 | Local / embedded (Parquet, no warehouse) | ✅ [local-embedded-analytics](local-embedded-analytics.md) | | | ★ | | ✓ | |
 | Write-back / actions | writeback-actions *(planned)* | ✓ | | ✓ | | | ✓ |
