@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.5.0...0.6.0) (2026-08-01)
+
+
+### Features
+
+* kamu (Open Data Fabric) backend — verifiable, time-travel BI ([4d99628](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/4d99628860845699fa61b5a12fc3890170881b43))
+* kamu (Open Data Fabric) backend + verifiable time-travel BI tutorial ([71e0c3d](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/71e0c3d1307c097099b85b92e303e92fe60b85cf))
+
 ## [0.5.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.4.2...0.5.0) (2026-08-01)
 
 
