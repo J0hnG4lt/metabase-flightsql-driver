@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.4.2...0.5.0) (2026-08-01)
+
+
+### Features
+
+* Metabase Actions — full-CRUD dashboard buttons/forms + tutorial ([88f940e](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/88f940e5acd58ec9afc541f11c97f53101c09353))
+* Metabase Actions (write-back) for full-DML Flight SQL backends ([1b174c5](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/1b174c527d5cf1556d9c32671757fe126041060c))
+
+
+### Documentation
+
+* CRUD-app tutorial (Actions) + wire Actions through the docs ([7aa9110](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/7aa911085e7efe780c5898574fa8d7c5df49a387))
+* full CRUD in the Todo-app tutorial (edit + delete + row-click) ([a2ebff9](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/a2ebff96c3d14796acfc0c373d8deb7c220e7b9f))
+
 ## [0.4.2](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.4.1...0.4.2) (2026-08-01)
 
 
