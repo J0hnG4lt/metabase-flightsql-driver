@@ -12,6 +12,24 @@ My main goal was to allow Metabase to use [Spice.ai OSS](https://spiceai.org/doc
 - Timestamp Conversion: Automatically converts TIMESTAMP columns to local date-time objects.
 - Field Filters: Full support for Metabase field filters including table aliases for JOIN queries.
 
+## Tutorials & use cases
+
+Because the driver is a **universal Flight SQL bridge**, the most useful docs are
+task-oriented: *here's a thing you can build, and the backend that makes it
+shine.* Hands-on, screenshot-driven guides live in
+**[docs/tutorials/](docs/tutorials/README.md)** — Iceberg lakehouses, caching,
+real-time analytics, transformations inside Metabase, CSV uploads, federation,
+time-series, and more.
+
+**Ten tutorials, each complete and screenshot-driven** — Iceberg lakehouse,
+transformations, CSV uploads, caching/acceleration, local/embedded analytics,
+federation/semantic layer, write-back, auth cookbook, time-series, and real-time.
+See the [use-case × backend matrix](docs/tutorials/README.md) to pick one.
+
+Per-backend setup, auth modes, feature support, and gotchas:
+**[docs/backends/](docs/backends/)** — Dremio · Spice.ai · GizmoSQL · InfluxDB 3 ·
+quack-on-demand · Doris/StarRocks.
+
 ## Compatibility
 
 CI builds one jar per supported Metabase release line (see release assets):

@@ -184,9 +184,15 @@ def main():
     if not wait_up():
         sys.exit("Dremio web/REST never came up on :9047")
 
-    # Make the bind-mounted warehouse writable by the dremio uid, then pre-create
-    # the schema folders (as the dremio user) so nested CTAS can resolve them.
+    # Make the warehouse writable by the dremio uid. Then clear any stale
+    # Iceberg files from a previous run and re-create the schema folders (as the
+    # dremio user) so nested CTAS can resolve them. The clear step keeps this
+    # script idempotent: Dremio's metadata store is not persisted by this
+    # profile, so a restart forgets the catalog while the warehouse volume keeps
+    # the files — without the clear, CTAS fails with "Folder already exists".
     container_sh(["chmod", "-R", "777", "/warehouse"], as_root=True)
+    container_sh(["rm", "-rf", "/warehouse/sales", "/warehouse/hr",
+                  "/warehouse/analytics"], as_root=True)
     container_sh(["mkdir", "-p", "/warehouse/sales", "/warehouse/hr",
                   "/warehouse/analytics"])
 
