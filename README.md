@@ -32,14 +32,29 @@ quack-on-demand · Doris/StarRocks.
 
 ## Compatibility
 
-CI builds one jar per supported Metabase release line (see release assets):
+**One jar per release — `arrow-flight-sql.metabase-driver.jar`** (see the
+[release assets](https://github.com/J0hnG4lt/metabase-flightsql-driver/releases)).
+Each release is built against the current Metabase line and bundles Arrow Flight
+SQL JDBC 19.0.0. Rather than guess the supported range, CI proves it: the
+`compat-smoke` job drops the jar into each Metabase version, boots it, and runs a
+query — so the "verified on" column below is evidence, not a claim.
 
-| Driver release | Metabase | Arrow Flight SQL JDBC | Notes |
-|---|---|---|---|
-| unreleased (main) | v0.62.5 (`-mb62` jar), v0.63.1 (`-mb63` jar) | 19.0.0 | MB 63 image runs JDK 25 — see *Java / JVM requirements* |
-| 0.1.0 | v0.62.5, v0.63.1 | 19.0.0 | |
-| 0.0.9 | v0.62.4 | 18.2.0 | |
-| 0.0.5 – 0.0.8 | v0.55 – v0.62 | 18.2.0 | |
+| Driver release | Built against | Verified on | Arrow JDBC | JDK note |
+|---|---|---|---|---|
+| unreleased (main) | Metabase v0.63.1 | 0.63.1 (required) · 0.62.5\* | 19.0.0 | 0.63 runs JDK 25 — see *Java / JVM requirements* |
+| 0.1.0 | v0.62.5 + v0.63.1 | — | 19.0.0 | shipped two jars (`-mb62`/`-mb63`); **now consolidated to one** |
+| 0.0.9 | v0.62.4 | — | 18.2.0 | |
+| 0.0.5 – 0.0.8 | v0.55 – v0.62 | — | 18.2.0 | |
+
+The driver targets **Metabase 0.63+**. \*0.62.5 is a best-effort/informational
+smoke check (it EOLs 2026-09-01). On older Metabase, use an earlier driver
+release or upgrade Metabase.
+
+> **Why one jar (not per-version)?** The driver is a single source file; the old
+> `-mb62`/`-mb63` split just AOT-compiled it against two Metabase checkouts. The
+> JDK 21-vs-25 difference is a *runtime* flag concern (see below), not a
+> packaging one. So — like the DuckDB and other community drivers — we ship one
+> jar and **test** across versions instead of **releasing** across versions.
 
 ## Java / JVM requirements (important for Metabase 63+)
 
@@ -70,7 +85,7 @@ For bare-JVM installs, add the same flags to the `java ... -jar metabase.jar` co
 
 ## Upgrading from 0.0.x
 
-Drop-in: replace the plugin jar (pick the `-mb62`/`-mb63` release asset matching your Metabase line) and restart Metabase. Existing connections keep working — the driver auto-detects legacy details (plain username/password or token) and backfills the new auth toggle on read.
+Drop-in: replace the plugin jar (`arrow-flight-sql.metabase-driver.jar`) and restart Metabase. Existing connections keep working — the driver auto-detects legacy details (plain username/password or token) and backfills the new auth toggle on read.
 
 After upgrading, open each Flight SQL connection in **Admin → Databases** and hit **Save** once: this persists the backfilled auth flag and re-validates the connection.
 
@@ -80,8 +95,8 @@ Behavior changes to be aware of:
 - Tokens entered through the admin UI now actually work (previously only API-created connections could authenticate with tokens).
 - `convertTimezone()` no longer appears in the expression editor — it was advertised but never worked.
 - FK metadata is no longer probed during sync (it always returned nothing anyway); Metabase-side semantic/FK settings are unaffected.
-- Release assets are now named per Metabase line (`arrow-flight-sql.metabase-driver-mb62.jar`, `-mb63.jar`) — update any download automation.
-- Built and tested against Metabase v0.62.5 and v0.63.1; bundles Arrow Flight SQL JDBC 19.0.0.
+- Release assets are now a **single jar** — `arrow-flight-sql.metabase-driver.jar` (0.1.0 shipped separate `-mb62`/`-mb63` jars; these are consolidated). Update any download automation that pinned the per-line names.
+- Built against Metabase v0.63.1 and CI-verified to load and query on it; bundles Arrow Flight SQL JDBC 19.0.0.
 
 ## Installation
 

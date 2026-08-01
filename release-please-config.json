@@ -12,6 +12,10 @@
     { "type": "chore", "section": "Maintenance", "hidden": false }
   ],
   "packages": {
-    ".": {}
+    ".": {
+      "extra-files": [
+        "resources/metabase-plugin.yaml"
+      ]
+    }
   }
 }

@@ -5,7 +5,7 @@ name: release-please
 #    the next semver (feat -> minor, fix -> patch, feat!/BREAKING CHANGE -> major).
 # 2. Merging that PR creates the git tag + GitHub release with the changelog.
 # 3. When (and only when) a release is created, the build-and-attach job below
-#    builds the per-Metabase-line driver jars and uploads them to that release.
+#    builds the single driver jar and uploads it to that release.
 #
 # NOTE: the build+attach MUST live in this workflow, not react to a
 # `release: published` event in build.yaml. GitHub does not trigger workflows
@@ -18,6 +18,11 @@ on:
 permissions:
   contents: write
   pull-requests: write
+
+# The Metabase version the released jar is built against (keep in sync with
+# build.yaml). One jar per release — see README "Compatibility".
+env:
+  MB_BUILD_REF: v0.63.1.6
 
 jobs:
   release-please:
@@ -38,18 +43,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        # Keep in sync with build.yaml's build matrix and README compatibility table.
-        metabase-ref: [ v0.62.5, v0.63.1.6 ]
-
     steps:
     - name: Clone Metabase repository
       uses: actions/checkout@v4
       with:
         repository: metabase/metabase
-        ref: ${{ matrix.metabase-ref }}
+        ref: ${{ env.MB_BUILD_REF }}
         path: metabase
 
     - name: Checkout driver code
@@ -88,9 +87,9 @@ jobs:
         path: |
           ~/.m2/repository
           ~/.gitlibs
-        key: ${{ runner.os }}-release-${{ matrix.metabase-ref }}-${{ hashFiles('metabase/modules/drivers/arrow-flight-sql/deps.edn', 'metabase/deps.edn') }}
+        key: ${{ runner.os }}-release-${{ env.MB_BUILD_REF }}-${{ hashFiles('metabase/modules/drivers/arrow-flight-sql/deps.edn', 'metabase/deps.edn') }}
         restore-keys: |
-          ${{ runner.os }}-release-${{ matrix.metabase-ref }}-
+          ${{ runner.os }}-release-${{ env.MB_BUILD_REF }}-
 
     - name: Build driver
       working-directory: ./metabase
@@ -98,16 +97,11 @@ jobs:
         chmod +x ./bin/build-driver.sh
         ./bin/build-driver.sh arrow-flight-sql
 
-    - name: Rename jar per Metabase line
-      run: |
-        MB_LINE=$(echo "${{ matrix.metabase-ref }}" | sed -E 's/^v0\.([0-9]+).*/mb\1/')
-        cp metabase/resources/modules/arrow-flight-sql.metabase-driver.jar \
-           "arrow-flight-sql.metabase-driver-${MB_LINE}.jar"
-        ls -la ./*.jar
-
-    - name: Attach jar to the release
+    - name: Attach the jar to the release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        cp metabase/resources/modules/arrow-flight-sql.metabase-driver.jar .
+        ls -la ./arrow-flight-sql.metabase-driver.jar
         gh release upload "${{ needs.release-please.outputs.tag_name }}" \
-          ./*.jar --clobber --repo "${{ github.repository }}"
+          ./arrow-flight-sql.metabase-driver.jar --clobber --repo "${{ github.repository }}"
