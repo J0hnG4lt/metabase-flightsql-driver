@@ -41,6 +41,7 @@ three schemas — `sales`, `hr`, `analytics`.
 | CSV uploads | ✅ (creates typed DuckDB table + model) |
 | Metabase transforms (`:transforms/table`) | ✅ (CTAS) |
 | Write (CTAS / DDL / DML) | ✅ |
+| Actions (write-back buttons/forms) | ✅ (Enable-Actions toggle → [CRUD tutorial](../tutorials/crud-app-gizmosql.md)) |
 | Read Iceberg / Delta / DuckLake / Parquet | ✅ (DuckDB extensions) |
 | Multi-catalog | ✅ (3 test catalogs) |
 

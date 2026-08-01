@@ -135,6 +135,17 @@ driver:
       visible-if:
         advanced-options: true
 
+    # Actions = write-back via dashboard buttons / forms (basic model actions +
+    # custom SQL actions). Only for FULL-DML backends (GizmoSQL/DuckDB, Dremio,
+    # Doris/StarRocks); Spice is INSERT-only, so edit/delete won't work there.
+    # Off by default — leave off on read-only or INSERT-only servers.
+    - name: enable-actions
+      display-name: Enable Actions (write-back buttons & forms)
+      type: boolean
+      default: false
+      visible-if:
+        advanced-options: true
+
     # String (not integer): the manifest linter has no integer type; the
     # driver coerces it.
     - name: connect-timeout-millis

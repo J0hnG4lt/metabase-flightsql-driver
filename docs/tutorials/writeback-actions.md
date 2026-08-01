@@ -16,11 +16,11 @@ on **Dremio the written table is Apache Iceberg**.
 - Snapshot or append results on a cadence (pair with [transforms](transformations-in-metabase.md)).
 - Build write-heavy flows on a lakehouse without leaving your BI tool.
 
-> **On Metabase "Actions" (row-level write-back forms/buttons):** those need
-> parameterized `INSERT/UPDATE/DELETE`, which the Arrow Flight SQL JDBC driver
-> can't bind — so this driver does **not** advertise the `actions` feature.
-> Write-back here means **SQL-level writes** (CTAS/INSERT/DDL) and
-> [transforms](transformations-in-metabase.md), which do work.
+> **Two flavors of write-back:** this page covers **SQL-level writes**
+> (CTAS/`INSERT`/DDL) plus [transforms](transformations-in-metabase.md). For
+> **row-level buttons & forms** (create/edit/delete a row from a dashboard), the
+> driver also supports Metabase **Actions** on full-DML backends — see the
+> [CRUD app tutorial](crud-app-gizmosql.md).
 
 ## What you'll build
 
@@ -85,9 +85,11 @@ manifest) and reports the commit. Only connections marked **writable** accept th
 
 ## Variations & gotchas
 
-- **No parameterized Actions.** Arrow Flight SQL JDBC can't bind statement
-  parameters, so Metabase's row-editing Actions aren't supported — use SQL writes
-  and transforms instead.
+- **Row-level Actions** (dashboard buttons/forms) work too, on full-DML backends,
+  behind the **Enable Actions** connection toggle — the driver inlines literals
+  since Arrow Flight SQL JDBC can't bind statement parameters. See the
+  [CRUD app tutorial](crud-app-gizmosql.md). Spice is INSERT-only, so its
+  edit/delete actions won't work.
 - **Writable backends only.** Dremio (Iceberg), GizmoSQL/DuckDB, Doris/StarRocks.
   Read-only backends (Spice datasets, InfluxDB 3) reject writes.
 - **Iceberg semantics.** Each write is a new Iceberg snapshot — time-travel and

@@ -33,7 +33,9 @@
    [metabase.driver.sync :as driver.s]
    ;; SQL execution helper functions.
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
-   [metabase.util.honey-sql-2        :as h2x] 
+   ;; Write-back Actions (basic + custom) multimethods.
+   [metabase.driver.sql-jdbc.actions :as sql-jdbc.actions]
+   [metabase.util.honey-sql-2        :as h2x]
 
    ))
 
@@ -133,6 +135,16 @@
   (defmethod driver/database-supports? [:arrow-flight-sql feature]
     [_driver _feature db]
     (boolean (get-in db [:details :enable-uploads]))))
+
+;; Actions = write-back via dashboard buttons / forms. Opt-in per connection
+;; (the enable-actions detail) and only meaningful on FULL-DML backends
+;; (GizmoSQL/DuckDB, Dremio, Doris/StarRocks). The INSERT/UPDATE/DELETE
+;; perform-action!* machinery is inherited from the :sql-jdbc parent; the driver
+;; supplies the row-value rendering it needs (see the actions section below).
+(doseq [feature [:actions :actions/custom]]
+  (defmethod driver/database-supports? [:arrow-flight-sql feature]
+    [_driver _feature db]
+    (boolean (get-in db [:details :enable-actions]))))
 
 ;; ----------------------------------------------------------------
 ;; Build a connection spec from the provided database details.
@@ -300,7 +312,10 @@
 (def ^:private database-type->base-type
   (sql-jdbc.sync/pattern-based-database-type->base-type
    [[#"BOOL"                       :type/Boolean]
-    [#"INT(8|16|32|64)?$"          :type/Integer]
+    ;; INTEGER (DuckDB/ANSI), INT, INT8/16/32/64, and via re-find SMALLINT/TINYINT.
+    ;; Without EGER, "INTEGER" fell through to type/* — which drops PK columns
+    ;; from Actions parameters (Metabase skips unknown-typed fields).
+    [#"INT(EGER|8|16|32|64)?$"     :type/Integer]
     [#"UINT(8|16|32)$"             :type/Integer]
     [#"UINT64"                     :type/BigInteger]
     [#"BIGINT|HUGEINT"             :type/BigInteger]
@@ -665,6 +680,62 @@
                                :quoted true
                                :dialect dialect)]]
         (jdbc/execute! conn statement)))))
+
+;; ----------------------------------------------------------------
+;; Actions (write-back buttons/forms), gated on enable-actions above. The
+;; :sql-jdbc parent's perform-action!* machinery (INSERT/UPDATE/DELETE +
+;; select-created-row) is reused; a Flight SQL backend only needs these two
+;; multimethods, which have no usable default:
+;;
+;;  - do-nested-transaction: Flight SQL servers are autocommit and do not
+;;    support savepoints, so the "nested transaction" just runs the thunk.
+;;    Single-row actions need no rollback isolation; bulk actions lose per-row
+;;    isolation (an acceptable trade-off — errors still surface per row).
+;;  - base-type->sql-type-map: SQL type names used to CAST row values on
+;;    create/update (DuckDB/GizmoSQL-flavored; the common DML type names are
+;;    shared by Doris and Dremio).
+(defmethod sql-jdbc.actions/do-nested-transaction :arrow-flight-sql
+  [_driver _connection thunk]
+  (thunk))
+
+(defmethod sql-jdbc.actions/base-type->sql-type-map :arrow-flight-sql
+  [_driver]
+  {:type/Text           "VARCHAR"
+   :type/Integer        "BIGINT"
+   :type/BigInteger     "BIGINT"
+   :type/Float          "DOUBLE"
+   :type/Decimal        "DECIMAL"
+   :type/Boolean        "BOOLEAN"
+   :type/Date           "DATE"
+   :type/Time           "TIME"
+   :type/DateTime       "TIMESTAMP"
+   :type/DateTimeWithTZ "TIMESTAMP WITH TIME ZONE"})
+
+;; After an INSERT the parent fetches the created row from RETURN_GENERATED_KEYS,
+;; but Flight SQL servers return an update count (an Integer), not generated
+;; keys — so the default select-created-row throws ("nth not supported on
+;; Integer"). Re-select the just-inserted row by matching the values we
+;; inserted (create-hsql :values is [{column -> casted-value}]); the returned
+;; row includes any auto-generated PK.
+(defmethod sql-jdbc.actions/select-created-row :arrow-flight-sql
+  [driver create-hsql conn _result]
+  (let [inserted (first (:values create-hsql))
+        ;; cast-values wraps each value as [:cast v [:raw sql-type]]; unwrap it.
+        uncast   (fn [v] (if (and (vector? v) (= :cast (first v))) (second v) v))]
+    (when (map? inserted)
+      (let [select-hsql (-> create-hsql
+                            (dissoc :insert-into :values)
+                            (assoc :select [:*]
+                                   :from  [(:insert-into create-hsql)]
+                                   ;; INLINE the match values (not bound params):
+                                   ;; Flight SQL can't bind e.g. a boolean here
+                                   ;; ("Binding STRING for expected Bool").
+                                   :where (into [:and]
+                                                (for [[col val] inserted]
+                                                  [:= col [:raw (upload-sql-literal (uncast val))]]))))
+            sql-args    (sql.qp/format-honeysql driver select-hsql)]
+        (first (jdbc/query {:connection conn} sql-args
+                           {:identifiers identity :transaction? false :keywordize? false}))))))
 
 ;; ----------------------------------------------------------------
 ;; Inline absolute datetime values as typed SQL literals. Prepared-statement
