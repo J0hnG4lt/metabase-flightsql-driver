@@ -33,7 +33,7 @@ this repo, so the steps are runnable, not hypothetical.
 | CSV uploads → typed model | ✅ [csv-uploads](csv-uploads.md) | ✓ | | ★ | | | ✓ |
 | Federation / semantic layer | federation-semantic-layer *(planned)* | ★ | ★ | | | | |
 | Time-series analytics | timeseries *(planned)* | | ✓ | | ★ | | |
-| Local / embedded (Parquet, no warehouse) | local-embedded-analytics *(planned)* | | | ★ | | ✓ | |
+| Local / embedded (Parquet, no warehouse) | ✅ [local-embedded-analytics](local-embedded-analytics.md) | | | ★ | | ✓ | |
 | Write-back / actions | writeback-actions *(planned)* | ✓ | | ✓ | | | ✓ |
 | Every authentication mode | auth-cookbook *(planned)* | user/pass | API-key, anon | user/pass, JWT, mTLS, OAuth | bearer | tenant/pool | user/pass |
 
