@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.1](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.4.0...0.4.1) (2026-08-01)
+
+
+### Bug Fixes
+
+* **dremio:** make setup_dremio.py idempotent across restarts ([867fbab](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/867fbabc8982e0e92dadfd0bfb4e48742efdad4c))
+
+
+### Documentation
+
+* auth-cookbook tutorial (all backends, 2 form screenshots) ([85b1978](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/85b1978b49a450d88f8f287a7e542d3c362519ee))
+* caching-acceleration tutorial (Spice, the driver's original purpose) ([0b07721](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/0b077216eb537045e332e39e6972395383bc936b))
+* csv-uploads tutorial (GizmoSQL, with screenshots) ([e6d607c](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/e6d607c8cf0ada11b4efdf45080726db154ab9c4))
+* federation-semantic-layer tutorial (Dremio/Spice, with screenshot) ([3ed31e0](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/3ed31e07aac8b282196c8b9b57d544728a8716fb))
+* local-embedded-analytics tutorial (GizmoSQL/DuckDB, with screenshot) ([132636d](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/132636d55a18491b5b9493e23d72ffe5c1960920))
+* realtime-analytics tutorial — all 10 tutorials complete ([4b9f89b](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/4b9f89b62e3586dd1a4476eede20e24b1cc00672))
+* timeseries tutorial (InfluxDB 3, with screenshot) ([6bcb63e](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/6bcb63e2fa2f6dc30a245814f576d85e5746c7a8))
+* transformations-in-metabase tutorial (GizmoSQL, with screenshots) ([004a889](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/004a88999ec45f928881f3601d974aad48ad26c2))
+* tutorial-driven docs — Iceberg exemplar (with screenshots) + backend refs + generator skill ([b8e81d3](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/b8e81d371f841408c2cf5c01f251b504c4a4e1c1))
+* tutorial-driven docs — Iceberg exemplar + backend refs + generator skill ([ff23648](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/ff236482dee22584a202ad93cc9291e0cb25e26e))
+* writeback-actions tutorial (Dremio, with screenshots) ([cd40113](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/cd4011322ae90613a30018986900422296570893))
+
 ## [0.4.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.3.0...0.4.0) (2026-07-30)
 
 
