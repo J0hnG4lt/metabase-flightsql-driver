@@ -11,6 +11,7 @@ My main goal was to allow Metabase to use [Spice.ai OSS](https://spiceai.org/doc
 - Custom Schema Sync: Implements table and column description methods for seamless Metabase integration.
 - Timestamp Conversion: Automatically converts TIMESTAMP columns to local date-time objects.
 - Field Filters: Full support for Metabase field filters including table aliases for JOIN queries.
+- Write-back: CSV uploads, Metabase transforms, and **Actions** (dashboard write-back buttons/forms — basic model create/update/delete + custom SQL) on full-DML backends, each behind an explicit connection toggle.
 
 ## Tutorials & use cases
 
@@ -21,9 +22,11 @@ shine.* Hands-on, screenshot-driven guides live in
 real-time analytics, transformations inside Metabase, CSV uploads, federation,
 time-series, and more.
 
-**Ten tutorials, each complete and screenshot-driven** — Iceberg lakehouse,
+**Eleven tutorials, each complete and screenshot-driven** — Iceberg lakehouse,
 transformations, CSV uploads, caching/acceleration, local/embedded analytics,
-federation/semantic layer, write-back, auth cookbook, time-series, and real-time.
+federation/semantic layer, write-back, a [CRUD app with dashboard
+buttons/forms](docs/tutorials/crud-app-gizmosql.md) (Metabase **Actions**), auth
+cookbook, time-series, and real-time.
 See the [use-case × backend matrix](docs/tutorials/README.md) to pick one.
 
 Per-backend setup, auth modes, feature support, and gotchas:
@@ -315,6 +318,7 @@ If using Claude Code, run `/e2e-test` for guided end-to-end testing instructions
 - Dashboard rendering with multiple concurrent queries
 - Connection pooling stability
 - Date/time type handling
+- Actions (write-back): basic model create/update/delete + custom SQL actions (`tests/e2e/test_actions.py`)
 
 ## Troubleshooting
 
