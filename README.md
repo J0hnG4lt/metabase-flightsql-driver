@@ -21,11 +21,10 @@ shine.* Hands-on, screenshot-driven guides live in
 real-time analytics, transformations inside Metabase, CSV uploads, federation,
 time-series, and more.
 
-- ✅ **[Apache Iceberg lakehouse](docs/tutorials/iceberg-lakehouse.md)** (Dremio) —
-  browse, query with SQL, and dashboard Iceberg tables through the driver.
-  *Complete, with screenshots.*
-- More are being added — see the
-  [use-case × backend matrix](docs/tutorials/README.md).
+**Ten tutorials, each complete and screenshot-driven** — Iceberg lakehouse,
+transformations, CSV uploads, caching/acceleration, local/embedded analytics,
+federation/semantic layer, write-back, auth cookbook, time-series, and real-time.
+See the [use-case × backend matrix](docs/tutorials/README.md) to pick one.
 
 Per-backend setup, auth modes, feature support, and gotchas:
 **[docs/backends/](docs/backends/)** — Dremio · Spice.ai · GizmoSQL · InfluxDB 3 ·

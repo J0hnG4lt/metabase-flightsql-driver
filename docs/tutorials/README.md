@@ -29,7 +29,7 @@ this repo, so the steps are runnable, not hypothetical.
 | Iceberg lakehouse (read/write) | ✅ [iceberg-lakehouse](iceberg-lakehouse.md) | ★ | ✓ | ✓ | | | |
 | Transformations inside Metabase | ✅ [transformations-in-metabase](transformations-in-metabase.md) | ✓ | | ★ | | | ✓ |
 | Caching / query acceleration | ✅ [caching-acceleration](caching-acceleration.md) | | ★ | | | | |
-| Real-time / CDC / live OLAP | realtime-analytics *(planned)* | | ★ | | ✓ | | ✓ |
+| Real-time / CDC / live OLAP | ✅ [realtime-analytics](realtime-analytics.md) | | ★ | | ✓ | | ✓ |
 | CSV uploads → typed model | ✅ [csv-uploads](csv-uploads.md) | ✓ | | ★ | | | ✓ |
 | Federation / semantic layer | ✅ [federation-semantic-layer](federation-semantic-layer.md) | ★ | ★ | | | | |
 | Time-series analytics | ✅ [timeseries](timeseries.md) | | ✓ | | ★ | | |
@@ -39,9 +39,9 @@ this repo, so the steps are runnable, not hypothetical.
 
 ★ = the backend the tutorial is built around · ✓ = also works · ✅ = tutorial complete
 
-> The tutorials marked ✅ are complete (with screenshots). The rest are being
-> written — each is generated end-to-end from a live PoC via the
-> [`tutorial-generator`](../../.claude/skills/tutorial-generator/SKILL.md) skill.
+> **All tutorials are complete, each with screenshots** captured from a live PoC
+> via the [`tutorial-generator`](../../.claude/skills/tutorial-generator/SKILL.md)
+> skill — so every image reflects the real product.
 
 ## Connection quick-reference
 
