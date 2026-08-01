@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.4.1...0.4.2) (2026-08-01)
+
+
+### Maintenance
+
+* sync plugin manifest version to 0.4.1 ([5a757eb](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/5a757eb97b7108abde71db00b2418e807ed665e1))
+* sync plugin manifest version to 0.4.1 (matches latest release) ([6ce2da5](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/6ce2da5509ddc61800622508e6249566d7f2dd94))
+
 ## [0.4.1](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.4.0...0.4.1) (2026-08-01)
 
 
