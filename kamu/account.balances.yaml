@@ -1,0 +1,26 @@
+kind: DatasetSnapshot
+version: 1
+content:
+  name: account.balances
+  kind: Root
+  metadata:
+    # A push source with a Snapshot merge strategy: each ingested batch is the
+    # complete current state, and kamu diffs it against the previous state to
+    # emit an append-only changelog (op = 0 append / 1 retract / 2 correct-from
+    # / 3 correct-to). This is what makes the bitemporal + audit-trail tutorials
+    # possible — the table records every change to every balance, not just the
+    # latest value.
+    - kind: AddPushSource
+      sourceName: default
+      read:
+        kind: NdJson
+        schema:
+          fields:
+            - name: account_id
+              type: string
+            - name: balance
+              type: int64
+      merge:
+        kind: Snapshot
+        primaryKey:
+          - account_id

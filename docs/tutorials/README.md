@@ -20,23 +20,24 @@ this repo, so the steps are runnable, not hypothetical.
    them Arrow's allocator fails to initialize. See the
    [main README](../../README.md#java--jvm-requirements-important-for-metabase-63).
 3. Optional backends live behind their own overlays (Dremio, Doris, TLS, OAuth,
-   …) — each tutorial says which to bring up.
+   kamu, …) — each tutorial says which to bring up.
 
 ## Use-case × backend matrix
 
-| Use case | Tutorial | Dremio | Spice.ai | GizmoSQL | InfluxDB 3 | quack | Doris/SR |
-|---|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| Iceberg lakehouse (read/write) | ✅ [iceberg-lakehouse](iceberg-lakehouse.md) | ★ | ✓ | ✓ | | | |
-| Transformations inside Metabase | ✅ [transformations-in-metabase](transformations-in-metabase.md) | ✓ | | ★ | | | ✓ |
-| Caching / query acceleration | ✅ [caching-acceleration](caching-acceleration.md) | | ★ | | | | |
-| Real-time / CDC / live OLAP | ✅ [realtime-analytics](realtime-analytics.md) | | ★ | | ✓ | | ✓ |
-| CSV uploads → typed model | ✅ [csv-uploads](csv-uploads.md) | ✓ | | ★ | | | ✓ |
-| Federation / semantic layer | ✅ [federation-semantic-layer](federation-semantic-layer.md) | ★ | ★ | | | | |
-| Time-series analytics | ✅ [timeseries](timeseries.md) | | ✓ | | ★ | | |
-| Local / embedded (Parquet, no warehouse) | ✅ [local-embedded-analytics](local-embedded-analytics.md) | | | ★ | | ✓ | |
-| Write-back / actions (SQL) | ✅ [writeback-actions](writeback-actions.md) | ✓ | | ✓ | | | ✓ |
-| CRUD app (dashboard buttons/forms) | ✅ [crud-app-gizmosql](crud-app-gizmosql.md) | ✓ | | ★ | | | ✓ |
-| Every authentication mode | ✅ [auth-cookbook](auth-cookbook.md) | user/pass | API-key, anon | user/pass, JWT, mTLS, OAuth | bearer | tenant/pool | user/pass |
+| Use case | Tutorial | Dremio | Spice.ai | GizmoSQL | InfluxDB 3 | quack | Doris/SR | kamu |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Iceberg lakehouse (read/write) | ✅ [iceberg-lakehouse](iceberg-lakehouse.md) | ★ | ✓ | ✓ | | | | |
+| Transformations inside Metabase | ✅ [transformations-in-metabase](transformations-in-metabase.md) | ✓ | | ★ | | | ✓ | |
+| Caching / query acceleration | ✅ [caching-acceleration](caching-acceleration.md) | | ★ | | | | | |
+| Real-time / CDC / live OLAP | ✅ [realtime-analytics](realtime-analytics.md) | | ★ | | ✓ | | ✓ | |
+| CSV uploads → typed model | ✅ [csv-uploads](csv-uploads.md) | ✓ | | ★ | | | ✓ | |
+| Federation / semantic layer | ✅ [federation-semantic-layer](federation-semantic-layer.md) | ★ | ★ | | | | | |
+| Time-series analytics | ✅ [timeseries](timeseries.md) | | ✓ | | ★ | | | |
+| Local / embedded (Parquet, no warehouse) | ✅ [local-embedded-analytics](local-embedded-analytics.md) | | | ★ | | ✓ | | |
+| Write-back / actions (SQL) | ✅ [writeback-actions](writeback-actions.md) | ✓ | | ✓ | | | ✓ | |
+| CRUD app (dashboard buttons/forms) | ✅ [crud-app-gizmosql](crud-app-gizmosql.md) | ✓ | | ★ | | | ✓ | |
+| Verifiable / time-travel BI (bitemporal, audit trail) | ✅ [verifiable-timetravel-bi](verifiable-timetravel-bi.md) | | | | | | | ★ |
+| Every authentication mode | ✅ [auth-cookbook](auth-cookbook.md) | user/pass | API-key, anon | user/pass, JWT, mTLS, OAuth | bearer | tenant/pool | user/pass | anon |
 
 ★ = the backend the tutorial is built around · ✓ = also works · ✅ = tutorial complete
 
@@ -57,6 +58,7 @@ Host is the compose service name; the driver connects over the metanet1 network.
 | InfluxDB 3 | `influxdb3` | 8181 | Token toggle on, paste admin token | [backends/influxdb3](../backends/influxdb3.md) |
 | quack-on-demand | `quack-on-demand` | 31338 | Username `admin` / Password `admin` | [backends/quack](../backends/quack.md) |
 | Doris / StarRocks | `doris` / `starrocks` | 8070 / 9408 | Username `root`, empty password | [backends/doris-starrocks](../backends/doris-starrocks.md) |
+| kamu (ODF) | `kamu` | 50050 | Username `anonymous` / Password `anonymous` | [backends/kamu](../backends/kamu.md) |
 
 ## How every tutorial is structured
 
@@ -68,4 +70,5 @@ Host is the compose service name; the driver connects over the metanet1 network.
 Setup, all supported auth modes, feature support, and known gotchas per engine:
 [Dremio](../backends/dremio.md) · [Spice.ai](../backends/spice.md) ·
 [GizmoSQL](../backends/gizmosql.md) · [InfluxDB 3](../backends/influxdb3.md) ·
-[quack-on-demand](../backends/quack.md) · [Doris/StarRocks](../backends/doris-starrocks.md)
+[quack-on-demand](../backends/quack.md) · [Doris/StarRocks](../backends/doris-starrocks.md) ·
+[kamu](../backends/kamu.md)

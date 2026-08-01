@@ -22,16 +22,17 @@ shine.* Hands-on, screenshot-driven guides live in
 real-time analytics, transformations inside Metabase, CSV uploads, federation,
 time-series, and more.
 
-**Eleven tutorials, each complete and screenshot-driven** — Iceberg lakehouse,
+**Twelve tutorials, each complete and screenshot-driven** — Iceberg lakehouse,
 transformations, CSV uploads, caching/acceleration, local/embedded analytics,
 federation/semantic layer, write-back, a [CRUD app with dashboard
-buttons/forms](docs/tutorials/crud-app-gizmosql.md) (Metabase **Actions**), auth
-cookbook, time-series, and real-time.
+buttons/forms](docs/tutorials/crud-app-gizmosql.md) (Metabase **Actions**),
+[verifiable time-travel & audit-trail BI](docs/tutorials/verifiable-timetravel-bi.md)
+(kamu/ODF bitemporal data), auth cookbook, time-series, and real-time.
 See the [use-case × backend matrix](docs/tutorials/README.md) to pick one.
 
 Per-backend setup, auth modes, feature support, and gotchas:
 **[docs/backends/](docs/backends/)** — Dremio · Spice.ai · GizmoSQL · InfluxDB 3 ·
-quack-on-demand · Doris/StarRocks.
+quack-on-demand · Doris/StarRocks · kamu.
 
 ## Compatibility
 
@@ -237,6 +238,26 @@ Token** from `.env` as `DREMIO_PAT`). The seeded Iceberg tables surface as schem
 `wh.sales` / `wh.hr` / `wh.analytics`. Dremio wants ~4 GB RAM and ~1–2 min to
 boot; the pytest suite auto-skips it unless `scripts/setup_dremio.py` succeeded
 (`DREMIO_READY` gate).
+
+### Optional kamu profile (verifiable, bitemporal lakehouse)
+
+[kamu](https://kamu.dev) (Open Data Fabric) serves Arrow Flight SQL via embedded
+DataFusion, but its datasets are **append-only changelogs**: every row carries ODF
+system columns (`op`, `system_time`, `event_time`) that make **time-travel** and
+**audit-trail** analytics possible from plain Metabase SQL — things a mutable
+warehouse table can't do. The driver reads it with zero changes.
+
+```bash
+podman-compose -f docker-compose.yaml -f docker-compose.kamu.yaml up -d kamu
+```
+
+The container self-seeds a `account.balances` dataset (with a correction and a
+retraction, so the changelog shows all four `op` codes) and serves Flight SQL on
+`:50050`. Connect from Metabase with **host `kamu`, port `50050`, user
+`anonymous`, password `anonymous`, encryption off**. See the
+[verifiable time-travel BI tutorial](docs/tutorials/verifiable-timetravel-bi.md)
+and the [kamu backend reference](docs/backends/kamu.md). Read-only over SQL (data
+enters via kamu ingest, not writes); use a single stable connection.
 
 ### CSV uploads (writable backends)
 
