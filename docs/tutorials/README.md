@@ -35,7 +35,7 @@ this repo, so the steps are runnable, not hypothetical.
 | Time-series analytics | timeseries *(planned)* | | ✓ | | ★ | | |
 | Local / embedded (Parquet, no warehouse) | ✅ [local-embedded-analytics](local-embedded-analytics.md) | | | ★ | | ✓ | |
 | Write-back / actions | ✅ [writeback-actions](writeback-actions.md) | ✓ | | ✓ | | | ✓ |
-| Every authentication mode | auth-cookbook *(planned)* | user/pass | API-key, anon | user/pass, JWT, mTLS, OAuth | bearer | tenant/pool | user/pass |
+| Every authentication mode | ✅ [auth-cookbook](auth-cookbook.md) | user/pass | API-key, anon | user/pass, JWT, mTLS, OAuth | bearer | tenant/pool | user/pass |
 
 ★ = the backend the tutorial is built around · ✓ = also works · ✅ = tutorial complete
 
