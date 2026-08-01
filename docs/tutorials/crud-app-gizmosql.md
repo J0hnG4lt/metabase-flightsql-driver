@@ -1,15 +1,20 @@
-# Tutorial: A CRUD app on your data (Actions)
+# Tutorial: A full-CRUD app on your data (Actions)
 
 **Backend:** GizmoSQL (DuckDB) · **Also works with:** Dremio, Doris/StarRocks ·
-**Level:** intermediate · **Time:** ~15 min
+**Level:** intermediate · **Time:** ~20 min
 
 ## Problem
 
 You want a small internal app — a to-do list, an approvals queue, a lookup-table
 editor — where people **create, edit, and delete rows** from a Metabase
-dashboard, no separate app framework. Metabase **Actions** do exactly this: buttons
-and forms that write back to your database. Through this driver they work on
-writable, full-DML Flight SQL backends.
+dashboard, no separate app framework. Metabase **Actions** do exactly this:
+buttons and forms that write back to your database. Through this driver they work
+on writable, full-DML Flight SQL backends.
+
+By the end you'll have a **Todo app** dashboard with **Create / Edit / Delete**
+wired to the table — click a row, edit it, done.
+
+![The Todo app dashboard: Todo ID filter, New/Edit/Delete buttons, and the table](images/crud-01-dashboard.png)
 
 ## When to use this
 
@@ -19,15 +24,8 @@ writable, full-DML Flight SQL backends.
 
 > **Backend must support full DML.** GizmoSQL/DuckDB, [Dremio](../backends/dremio.md)
 > (Iceberg), and [Doris/StarRocks](../backends/doris-starrocks.md) qualify.
-> **Spice is INSERT-only**, so basic (edit/delete) actions won't work there — see
+> **Spice is INSERT-only**, so edit/delete actions won't work there — see
 > [write-back / actions](writeback-actions.md).
-
-## What you'll build
-
-A **Todo app**: a dashboard showing a todos table with a **➕ New Todo** button
-that opens a form and writes a new row back to GizmoSQL.
-
-![The Todo app dashboard: a table plus a New Todo action button](images/crud-01-dashboard.png)
 
 ## Prerequisites
 
@@ -70,41 +68,75 @@ Turn the table into a **model** (New → Model → pick `main.todos`). A model t
 wraps a single table automatically gets **basic actions** — *create*, *update*,
 and *delete* — plus you can add **custom SQL actions** for bespoke writes.
 
-## Step 4 — Put a button on a dashboard
+## Step 4 — Build the dashboard
 
-Create a dashboard, add the todos question (a table), then **add an action
-button**: *Edit dashboard → Add → Action*, pick the model's **Create** action,
-and label it `➕ New Todo`. Save.
+Create a dashboard and, in **edit mode**, assemble four things:
+
+1. **The table.** Add the todos question (a plain table of the model).
+2. **A "Todo ID" filter.** *Add a filter → Number → Equal to*, name it **Todo
+   ID**. This is how Edit/Delete know *which* row to act on.
+3. **Three action buttons.** *Add → Action* three times:
+   | Button | Action | Label |
+   |---|---|---|
+   | Create | model's **Create** | `➕ New Todo` |
+   | Update | model's **Update** | `✏️ Edit Todo` |
+   | Delete | model's **Delete** | `🗑️ Delete Todo` |
+4. **Map the row-scoped actions to the filter.** On **Edit Todo** and **Delete
+   Todo**, map the action's **`id`** parameter to the **Todo ID** dashboard
+   filter (so `id` comes from the filter, not typed by hand). Leave `task` /
+   `done` to be entered in the form.
+
+### Wire row-clicks to the filter (so clicking a row targets it)
+
+Still in edit mode, click the table card's **behavior** (the ✎/click-behavior
+gear) → **Update a dashboard filter** → set **Todo ID = column `id`**. Now
+**clicking any row sets the Todo ID filter to that row's id** — Edit/Delete then
+operate on the row you clicked. Save the dashboard.
+
+> This is the "row → action" wiring: Metabase dashboards don't run an action
+> straight from a row click, but a row click *sets the filter*, and the mapped
+> Edit/Delete buttons act on it. Create isn't row-scoped (it makes a new row), so
+> it needs no filter.
 
 ## Step 5 — Use it
 
-Click **➕ New Todo**. Metabase opens a form built from the model's columns — note
-the PK `id` is omitted (it auto-generates):
+**Create.** Click **➕ New Todo** → a form built from the model's columns (the PK
+`id` is omitted — it auto-generates):
 
 ![The Create todo action form](images/crud-02-form.png)
 
-Type a task and **Save**. The `INSERT` runs on GizmoSQL through the driver and the
-table refreshes with the new row:
+Type a task, **Save**, and the `INSERT` runs on GizmoSQL through the driver:
 
 ![The dashboard after the action inserted a new row](images/crud-03-result.png)
 
-Wire up **Edit** and **Delete** the same way (the *update* / *delete* actions), or
-let users click a row to edit it — full CRUD from the dashboard.
+**Edit.** Click a **row** (the Todo ID filter fills with its id), then **✏️ Edit
+Todo**. The form opens **pre-filled with that row's current values** — change
+what you want and **Update**:
+
+![The pre-filled Update form after clicking a row](images/crud-04-edit.png)
+
+**Delete.** Click a **row**, then **🗑️ Delete Todo** → confirm. The `DELETE` runs
+and the table refreshes.
+
+That's full CRUD — Create, Read, Update, Delete — from one dashboard.
 
 ---
 
 ## How it works
 
 ```
-button → form → Metabase Action ──(INSERT/UPDATE/DELETE via arrow-flight-sql)──▶ GizmoSQL
-                  create/update/delete                 driver
+click row ─▶ sets "Todo ID" filter ─┐
+                                     ├─▶ ✏️ Edit  ─▶ UPDATE ─┐
+➕ New ─▶ CREATE ────────────────────┤   🗑️ Delete ─▶ DELETE ─┼▶ arrow-flight-sql ─▶ GizmoSQL
+                                     └────────────────────────┘        driver
 ```
 
 The driver advertises the `:actions` / `:actions/custom` features (gated on the
 Enable-Actions toggle) and reuses Metabase's `perform-action!*` machinery, with a
 few Flight-SQL-specific pieces (autocommit "transactions", value casting, and an
 inline row-lookup after insert since Flight SQL returns an update count, not
-generated keys). Covered by [test_actions.py](../../tests/e2e/test_actions.py).
+generated keys). Basic create/update/delete **and** custom SQL actions are
+covered end-to-end by [test_actions.py](../../tests/e2e/test_actions.py).
 
 ## Variations & gotchas
 
@@ -113,6 +145,8 @@ generated keys). Covered by [test_actions.py](../../tests/e2e/test_actions.py).
 - **Mark the PK** (Entity Key) — required for basic actions; auto-detection
   varies across backends so it's a manual step here.
 - **Auto-increment the PK** (a sequence/identity) so *create* can omit it.
+- **Update/Delete need the `id`.** The Todo ID filter (fed by the row click)
+  supplies it; without a filter value the buttons have no row to act on.
 - **Custom SQL actions** handle writes the basic actions don't — any
   parameterized `INSERT/UPDATE/DELETE` with `{{template-tags}}`.
 - **Permissions.** Creating/running actions is admin-gated; restrict write access
