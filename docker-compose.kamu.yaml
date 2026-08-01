@@ -1,0 +1,51 @@
+# kamu (Open Data Fabric) test profile — a verifiable, bitemporal data
+# lakehouse that speaks Apache Arrow Flight SQL directly on port 50050 via its
+# embedded Apache DataFusion engine. Unlike every other backend in the matrix,
+# each kamu dataset is an append-only *changelog*: every row carries ODF system
+# columns `offset`, `op` (0=append/1=retract/2=correct-from/3=correct-to),
+# `system_time` (transaction time) and `event_time` (valid time) — so Metabase
+# can do time-travel ("as of" a past date) and audit-trail analytics that a
+# plain warehouse table can't express.
+#
+# Usage:
+#   podman-compose -f docker-compose.yaml -f docker-compose.kamu.yaml up -d kamu
+#
+# Metabase connects to kamu:50050 with username/password `anonymous`/`anonymous`
+# (a local single-tenant kamu server; no TLS) — the both-present auth branch of
+# the driver, useEncryption off.
+#
+# Seeding is in-process (DataFusion, no inner containers → no --privileged): the
+# container adds the mounted dataset manifest, ingests two Snapshot batches (the
+# second corrects one balance, adds one account, and drops another → exercising
+# op codes 0/1/2/3), then `exec`s the Flight SQL server. The workspace is
+# ephemeral (re-seeded on each start), which is fine for a demo backend.
+services:
+  kamu:
+    image: ghcr.io/kamu-data/kamu-base:latest
+    container_name: kamu
+    hostname: kamu
+    working_dir: /opt/kamu/workspace
+    volumes:
+      - ./kamu:/manifests:ro
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        kamu init --exists-ok
+        kamu add /manifests/account.balances.yaml
+        printf '%s\n' \
+          '{"account_id":"acc-1","balance":100}' \
+          '{"account_id":"acc-2","balance":50}' \
+          '{"account_id":"acc-3","balance":30}' \
+          | kamu ingest account.balances --stdin --event-time 2024-01-01T00:00:00Z
+        printf '%s\n' \
+          '{"account_id":"acc-1","balance":100}' \
+          '{"account_id":"acc-2","balance":75}' \
+          '{"account_id":"acc-4","balance":200}' \
+          | kamu ingest account.balances --stdin --event-time 2024-01-02T00:00:00Z
+        exec kamu sql server --address 0.0.0.0 --port 50050
+    ports:
+      - "50050:50050"
+    networks:
+      - metanet1
