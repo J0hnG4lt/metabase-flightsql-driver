@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.6.0...0.6.1) (2026-08-02)
+
+
+### Maintenance
+
+* **deps:** align Clojure to 1.12.3 (Metabase 0.63 runtime); Arrow JDBC stays 19.0.0 ([61ad412](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/61ad412640f2dc34cc78eab8cd8f0b245509e87b))
+* **deps:** align Clojure to 1.12.3; Arrow Flight SQL JDBC stays at latest (19.0.0) ([63a93d3](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/63a93d3c646a748b6395dfc1539d6ecf043c4d3c))
+
 ## [0.6.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.5.0...0.6.0) (2026-08-01)
 
 
