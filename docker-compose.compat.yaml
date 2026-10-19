@@ -34,6 +34,7 @@ services:
       - "127.0.0.1:${METABASE_PORT:-3001}:3000"
     environment:
       MB_SITE_URL: ${METABASE_URL:-http://127.0.0.1:3001}
+      MB_TRANSFORMS_ENABLED: "true"
       MB_DB_FILE: /metabase-data/metabase.db
       JAVA_OPTS: >-
         -Xmx768m

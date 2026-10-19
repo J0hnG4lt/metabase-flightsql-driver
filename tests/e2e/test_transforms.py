@@ -30,6 +30,10 @@ def test_transforms_gated_by_connection(mb, gizmo_writable):
 
 
 def test_ctas_transform_runs_and_creates_table(mb, gizmo_writable):
+    _, properties = mb.get("/api/session/properties")
+    if "transforms-enabled" in properties:
+        assert properties["transforms-enabled"], \
+            "Enable transforms in Data Studio or set MB_TRANSFORMS_ENABLED=true (required on Metabase 64)"
     gid = gizmo_writable
     _, meta = mb.get(f"/api/database/{gid}/metadata")
     orders = next(t for t in meta["tables"]

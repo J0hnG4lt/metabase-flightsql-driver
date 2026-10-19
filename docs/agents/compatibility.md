@@ -24,6 +24,12 @@ Use an isolated checkout: bootstrap writes its API key to that checkout's ignore
 native results and structured date filtering. Optional `scripts/agent_smoke.py`
 checks the official MCP/CLI surfaces on 64.
 
+Both local compose stacks explicitly enable basic transforms with
+`MB_TRANSFORMS_ENABLED=true`, required on self-hosted Metabase 64. The driver's
+per-connection writable-backend toggle must also be enabled to run transforms.
+For an existing instance, enable transforms in Data Studio before running the
+transform E2E tests; a disabled feature can return HTTP 402 on transform creation.
+
 Override `METABASE_IMAGE`, `METABASE_PORT` and `METABASE_URL` to test another
 runtime on a separate project. **Use a new project/application-data volume for
 each version**; downgrading a migrated Metabase database is not supported. A

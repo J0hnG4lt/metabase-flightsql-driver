@@ -49,6 +49,8 @@ services:
         --enable-native-access=ALL-UNNAMED
         -Dio.netty.tryReflectionSetAccessible=true
       MB_SITE_URL: http://127.0.0.1:3000
+      # Metabase 64 requires explicit opt-in even for self-hosted basic transforms.
+      MB_TRANSFORMS_ENABLED: "true"
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabaseappdb
       MB_DB_PORT: 5432
