@@ -1,7 +1,7 @@
 # Project config loads after the repository is trusted. Authenticate once with
 # `codex mcp login metabase`; credentials stay in Codex's user credential store.
 [mcp_servers.metabase]
-url = "http://localhost:3000/api/metabase-mcp"
+url = "http://127.0.0.1:3000/api/metabase-mcp"
 startup_timeout_sec = 30
 tool_timeout_sec = 120
 

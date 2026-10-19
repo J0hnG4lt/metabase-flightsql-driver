@@ -11,5 +11,5 @@ then execute a query with [the CLI/API workflow](metabase-api.md) or
 [run the E2E tests](e2e-test.md).
 
 For the isolated stack, use `-f docker-compose.compat.yaml -p flightsql-compat
---url http://localhost:3001` with the helper. Use `scripts/compat_smoke.py`
+--url http://127.0.0.1:3001` with the helper. Use `scripts/compat_smoke.py`
 instead of the full demo setup for that two-service stack.

@@ -48,7 +48,7 @@ services:
         --sun-misc-unsafe-memory-access=allow
         --enable-native-access=ALL-UNNAMED
         -Dio.netty.tryReflectionSetAccessible=true
-      MB_SITE_URL: http://localhost:3000
+      MB_SITE_URL: http://127.0.0.1:3000
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabaseappdb
       MB_DB_PORT: 5432
@@ -58,7 +58,7 @@ services:
     networks:
       - metanet1
     healthcheck:
-      test: ["CMD", "curl", "--fail", "-I", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "--fail", "-I", "http://127.0.0.1:3000/api/health"]
       interval: 15s
       timeout: 5s
       retries: 5

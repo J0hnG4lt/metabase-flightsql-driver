@@ -11,7 +11,7 @@ CLI_PACKAGE = "@metabase/cli@0.5.1"
 
 def cli_environment(environ, saved):
     env = dict(environ)
-    env["MB_URL"] = environ.get("METABASE_URL") or saved.get("METABASE_URL", "http://localhost:3000")
+    env["MB_URL"] = environ.get("METABASE_URL") or saved.get("METABASE_URL", "http://127.0.0.1:3000")
     env["MB_API_KEY"] = environ.get("METABASE_API_KEY") or saved.get("METABASE_API_KEY", "")
     return env
 

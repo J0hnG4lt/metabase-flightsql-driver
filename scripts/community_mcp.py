@@ -10,7 +10,7 @@ from dev import ROOT, read_env
 def main():
     saved = read_env(ROOT / ".env")
     env = os.environ.copy()
-    env.setdefault("METABASE_URL", saved.get("METABASE_URL", "http://localhost:3000"))
+    env.setdefault("METABASE_URL", saved.get("METABASE_URL", "http://127.0.0.1:3000"))
     env.setdefault("METABASE_API_KEY", saved.get("METABASE_API_KEY", ""))
     if not env["METABASE_API_KEY"]:
         sys.exit("Set METABASE_API_KEY or bootstrap this checkout's ignored .env first")

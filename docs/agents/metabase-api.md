@@ -22,7 +22,7 @@ Keep them for regression tests, unsupported CLI operations and protocol debuggin
 `scripts/metabase_setup.py` creates the demo admin and stores `METABASE_API_KEY`
 in ignored `.env`; REST uses the `x-api-key` header. The CLI uses **MB_API_KEY**
 and **MB_URL**. Never print keys or place them in command arguments. Bootstrap
-and setup honor `METABASE_URL` (default `http://localhost:3000`).
+and setup honor `METABASE_URL` (default `http://127.0.0.1:3000`).
 
 When touching auth code test both legacy REST `token` and UI-created
 `token-value`/`token-id` connection details. Use real metadata IDs; an existing

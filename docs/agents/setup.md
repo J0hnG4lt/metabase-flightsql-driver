@@ -9,9 +9,11 @@ and pip-installed podman-compose for local containers.
 ## Official Metabase MCP (preferred)
 
 Both `.mcp.json` and `.codex/config.toml` point to
-`http://localhost:3000/api/metabase-mcp`. In Metabase's Admin > AI > MCP, enable
+`http://127.0.0.1:3000/api/metabase-mcp`. In Metabase's Admin > AI > MCP, enable
 the server and ensure AI features are enabled. An LLM provider is not required.
 Set `MB_SITE_URL` to the exact external URL clients use; compose configures it.
+Use the explicit IPv4 address for these local defaults: on some Windows hosts
+Node resolves `localhost` only to `::1`, while Podman forwards the port on IPv4.
 
 - Claude Code: start `claude`, open `/mcp`, select `metabase` and authenticate.
 - Codex: trust/open this repository, check `codex mcp list`, then run
@@ -34,7 +36,7 @@ This repo tests `@metabase/cli@0.5.1`. To install the `mb` command yourself:
 
 ```text
 npm install -g @metabase/cli@0.5.1
-mb auth login --url http://localhost:3000 --profile flightsql-local
+mb auth login --url http://127.0.0.1:3000 --profile flightsql-local
 mb auth status --profile flightsql-local
 mb skills get core --profile flightsql-local
 mb database list --profile flightsql-local --json

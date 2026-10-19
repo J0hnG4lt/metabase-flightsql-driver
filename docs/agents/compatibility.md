@@ -7,14 +7,14 @@ Keep the same `-p` project argument throughout. Build before starting Metabase:
 ```text
 podman-compose -p flightsql-compat -f docker-compose.compat.yaml run --rm builder
 podman-compose -p flightsql-compat -f docker-compose.compat.yaml up -d metabase
-python scripts/dev.py health --url http://localhost:3001
+python scripts/dev.py health --url http://127.0.0.1:3001
 ```
 
 The following environment setting is PowerShell syntax (in Bash use
-`export METABASE_URL=http://localhost:3001`):
+`export METABASE_URL=http://127.0.0.1:3001`):
 
 ```powershell
-$env:METABASE_URL = 'http://localhost:3001'
+$env:METABASE_URL = 'http://127.0.0.1:3001'
 python scripts/ci_bootstrap.py
 python scripts/compat_smoke.py
 ```

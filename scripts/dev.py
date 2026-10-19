@@ -58,7 +58,7 @@ def main(argv=None):
     parser.add_argument("action", choices=["up", "rebuild", "test", "reset", "health"])
     parser.add_argument("-f", "--file", action="append", help="compose file (repeatable)")
     parser.add_argument("-p", "--project", help="compose project name")
-    parser.add_argument("--url", default=os.environ.get("METABASE_URL", "http://localhost:3000"))
+    parser.add_argument("--url", default=os.environ.get("METABASE_URL", "http://127.0.0.1:3000"))
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--delete-data", action="store_true", help="explicitly authorize reset's volume deletion")
     parser.add_argument("--pytest", nargs=argparse.REMAINDER, help="pytest paths/options (default: tests/e2e -v)")

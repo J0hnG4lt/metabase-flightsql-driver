@@ -14,7 +14,7 @@ import uuid
 
 import pytest
 
-BASE = "http://localhost:3000"
+from conftest import BASE
 
 CSV = ("city,temp,happy,visited_on\n"
        "Madrid,31.5,true,2026-07-01\n"
