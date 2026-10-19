@@ -10,7 +10,7 @@ on:
 # (the community norm — see README "Compatibility"). Bump this when you target a
 # newer Metabase line; the compat-smoke job proves which versions it loads on.
 env:
-  MB_BUILD_REF: v0.64.2.8
+  MB_BUILD_REF: v0.64.2.9
 
 jobs:
   agent-assets:
@@ -128,7 +128,7 @@ jobs:
       matrix:
         include:
           # Built against this line → must pass.
-          - metabase: v0.64.2.8
+          - metabase: v0.64.2.9
             jdk_unsafe: "--sun-misc-unsafe-memory-access=allow --enable-native-access=ALL-UNNAMED"
             required: true
           # Retained supported line: the SAME jar must also work on 63.

@@ -27,7 +27,7 @@ services:
       - ./gizmosql/init.sql:/opt/gizmosql/init.sql:ro
 
   metabase:
-    image: ${METABASE_IMAGE:-metabase/metabase:v0.64.2.8}
+    image: ${METABASE_IMAGE:-metabase/metabase:v0.64.2.9}
     depends_on:
       - gizmosql
     ports:

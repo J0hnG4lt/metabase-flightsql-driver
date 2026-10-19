@@ -98,7 +98,7 @@ class AssetCheckTest(unittest.TestCase):
 
     def test_changed_release_pin_is_rejected(self):
         path = self.root / ".github/workflows/release-please.yml"
-        path.write_text(path.read_text().replace("v0.64.2.8", "v0.63.1.6"), encoding="utf-8")
+        path.write_text(path.read_text().replace("v0.64.2.9", "v0.63.1.6"), encoding="utf-8")
         self.assertTrue(any("pins differ" in error for error in check_agent_assets.check(self.root)))
 
 

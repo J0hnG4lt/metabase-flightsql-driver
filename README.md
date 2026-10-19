@@ -45,7 +45,7 @@ query — so the "verified on" column below is evidence, not a claim.
 
 | Driver release | Built against | Verified on | Arrow JDBC | JDK note |
 |---|---|---|---|---|
-| unreleased | Metabase v0.64.2.8 | 0.64.2.8 + 0.63.1.6 required in CI | 19.0.0 | Runtime images use JDK 25; keep the Arrow flags below |
+| unreleased | Metabase v0.64.2.9 | 0.64.2.9 + 0.63.1.6 required in CI | 19.0.0 | Runtime images use JDK 25; keep the Arrow flags below |
 | 0.1.0 | v0.62.5 + v0.63.1 | — | 19.0.0 | shipped two jars (`-mb62`/`-mb63`); **now consolidated to one** |
 | 0.0.9 | v0.62.4 | — | 18.2.0 | |
 | 0.0.5 – 0.0.8 | v0.55 – v0.62 | — | 18.2.0 | |
@@ -100,7 +100,7 @@ Behavior changes to be aware of:
 - `convertTimezone()` no longer appears in the expression editor — it was advertised but never worked.
 - FK metadata is no longer probed during sync (it always returned nothing anyway); Metabase-side semantic/FK settings are unaffected.
 - Release assets are now a **single jar** — `arrow-flight-sql.metabase-driver.jar` (0.1.0 shipped separate `-mb62`/`-mb63` jars; these are consolidated). Update any download automation that pinned the per-line names.
-- The next release builds against Metabase v0.64.2.8 and requires runtime checks on both 64 and 63; Arrow Flight SQL JDBC remains 19.0.0.
+- The next release builds against Metabase v0.64.2.9 and requires runtime checks on both 64 and 63; Arrow Flight SQL JDBC remains 19.0.0.
 
 ## Installation
 
@@ -326,9 +326,9 @@ The setup script creates a test dashboard with:
 - **5 field filters** (Order Status, Country, Department, Marketing Channel, Date Range)
 - **3 test schemas** in GizmoSQL (sales, hr, analytics)
 
-### Claude Code Integration
+### Claude Code and Codex integration
 
-If using Claude Code, run `/e2e-test` for guided end-to-end testing instructions.
+Run `/e2e-test` in Claude Code or `$e2e-test` in Codex for the shared end-to-end testing workflow.
 
 ## Features Tested
 
