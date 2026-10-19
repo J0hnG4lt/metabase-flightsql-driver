@@ -744,16 +744,21 @@
 ;; every value with a "yyyy-MM-dd HH:mm:ss" pattern, which throws
 ;; UnsupportedTemporalTypeException for date-only (LocalDate) values.
 (defmethod sql.qp/->honeysql [:arrow-flight-sql :absolute-datetime]
-  [_driver [_ value _unit]]
-  (condp instance? value
-    LocalDate      [:raw (format "DATE '%s'" value)]
-    LocalTime      [:raw (format "TIME '%s'" (.format ^LocalTime value time-literal-formatter))]
-    LocalDateTime  [:raw (format "TIMESTAMP '%s'" (.format ^LocalDateTime value timestamp-literal-formatter))]
-    ;; keep the wall-clock time, matching the previous behavior and the
-    ;; TIMESTAMP-without-timezone storage of the demo backends
-    OffsetDateTime [:raw (format "TIMESTAMP '%s'"
-                                 (.format (.toLocalDateTime ^OffsetDateTime value)
-                                          timestamp-literal-formatter))]
-    ;; anything else: let the value flow through as a JDBC parameter
-    ;; (set-parameter impls above cover the common temporal classes)
-    value))
+  [_driver [_ value-or-options mbql5-value]]
+  ;; Metabase 64 compiles MBQL 5 directly: [:absolute-datetime opts value unit].
+  ;; Metabase 63 still dispatches the legacy [:absolute-datetime value unit].
+  ;; Reading the options map as a timestamp produces a JDBC parameter rather
+  ;; than the typed literal needed by Flight SQL date filters.
+  (let [value (if (map? value-or-options) mbql5-value value-or-options)]
+    (condp instance? value
+      LocalDate      [:raw (format "DATE '%s'" value)]
+      LocalTime      [:raw (format "TIME '%s'" (.format ^LocalTime value time-literal-formatter))]
+      LocalDateTime  [:raw (format "TIMESTAMP '%s'" (.format ^LocalDateTime value timestamp-literal-formatter))]
+      ;; keep the wall-clock time, matching the previous behavior and the
+      ;; TIMESTAMP-without-timezone storage of the demo backends
+      OffsetDateTime [:raw (format "TIMESTAMP '%s'"
+                                   (.format (.toLocalDateTime ^OffsetDateTime value)
+                                            timestamp-literal-formatter))]
+      ;; anything else: let the value flow through as a JDBC parameter
+      ;; (set-parameter impls above cover the common temporal classes)
+      value)))

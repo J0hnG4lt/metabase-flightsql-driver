@@ -38,3 +38,8 @@ oauth/
 .oauth-probe-token
 .vscode/
 META-INF/
+
+# Local validation stacks, logs and agent credentials
+.logs/
+.claude.local.md
+.codex/*.local.toml

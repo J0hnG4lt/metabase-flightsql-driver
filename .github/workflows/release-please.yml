@@ -22,7 +22,7 @@ permissions:
 # The Metabase version the released jar is built against (keep in sync with
 # build.yaml). One jar per release — see README "Compatibility".
 env:
-  MB_BUILD_REF: v0.63.1.6
+  MB_BUILD_REF: v0.64.2.8
 
 jobs:
   release-please:

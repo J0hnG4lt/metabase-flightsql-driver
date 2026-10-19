@@ -1,12 +1,11 @@
 {:paths ["src" "resources"]
 
- :deps {;; Match Metabase 0.63's own Clojure (its deps.edn pins 1.12.3). The
+ :deps {;; Match Metabase 0.63/0.64's own Clojure (its deps.edn pins 1.12.3). The
         ;; release jar is built inside Metabase's tree, so Clojure is provided
         ;; by Metabase at runtime — declaring the same version just keeps local
         ;; builds/tests/REPL aligned with what the driver actually runs on.
         org.clojure/clojure {:mvn/version "1.12.3"}
-        ;; 19.0.0 (2026-03) is the LATEST apache/arrow-java release AND the
-        ;; latest on Maven Central (verified Aug 2026). The arrow 20.x/21.x you
+        ;; 19.0.0 is the tested Arrow Java baseline for this driver. The arrow 20.x/21.x you
         ;; see are the separate C++/Python monorepo, which ships no Java driver;
         ;; arrow-java main is an unreleased 20.0.0-SNAPSHOT. 19.0.0 adds OAuth2
         ;; (oauth.* URL props, GH-952), connectTimeoutMillis (18.3.0) and UUID

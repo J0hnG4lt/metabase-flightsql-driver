@@ -14,7 +14,7 @@ services:
     restart: "no"
 
   metabase:
-    image: metabase/metabase:v0.63.1.6
+    image: metabase/metabase:v0.64.2.8
     container_name: metabase
     hostname: metabase
     depends_on:
@@ -48,6 +48,7 @@ services:
         --sun-misc-unsafe-memory-access=allow
         --enable-native-access=ALL-UNNAMED
         -Dio.netty.tryReflectionSetAccessible=true
+      MB_SITE_URL: http://localhost:3000
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabaseappdb
       MB_DB_PORT: 5432

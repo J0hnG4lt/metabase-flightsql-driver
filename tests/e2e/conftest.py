@@ -7,6 +7,7 @@ Optional stacks enable extra tests when present:
   - influxdb3 (seeded via scripts/setup_influxdb3.py)
 """
 import json
+import os
 import socket
 import time
 import urllib.error
@@ -16,7 +17,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BASE = "http://localhost:3000"
+BASE = os.environ.get("METABASE_URL", "http://localhost:3000").rstrip("/")
 
 
 def load_env():

@@ -1,0 +1,57 @@
+# Isolated compatibility stack: no fixed container names, no demo/prod volumes.
+# Build first: podman-compose -p flightsql-compat -f docker-compose.compat.yaml run --rm builder
+# Then:       podman-compose -p flightsql-compat -f docker-compose.compat.yaml up -d metabase
+services:
+  builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.lein
+    working_dir: /builder
+    volumes:
+      - .:/builder:ro
+      - ./target:/builder/target
+      - compat-maven:/root/.m2
+    command: ["lein", "uberjar"]
+    restart: "no"
+
+  gizmosql:
+    image: gizmodata/gizmosql:v1.35.1
+    environment:
+      TLS_ENABLED: "false"
+      GIZMOSQL_USERNAME: gizmosql
+      GIZMOSQL_PASSWORD: gizmosql_password
+      SECRET_KEY: compat-test-signing-key-0123456789abcdef
+      DATABASE_FILENAME: ":memory:"
+      INIT_SQL_COMMANDS_FILE: /opt/gizmosql/init.sql
+    volumes:
+      - ./gizmosql/init.sql:/opt/gizmosql/init.sql:ro
+
+  metabase:
+    image: ${METABASE_IMAGE:-metabase/metabase:v0.64.2.8}
+    depends_on:
+      - gizmosql
+    ports:
+      - "127.0.0.1:${METABASE_PORT:-3001}:3000"
+    environment:
+      MB_SITE_URL: ${METABASE_URL:-http://localhost:3001}
+      MB_DB_FILE: /metabase-data/metabase.db
+      JAVA_OPTS: >-
+        -Xmx768m
+        --add-opens=java.base/java.nio=ALL-UNNAMED
+        --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+        --sun-misc-unsafe-memory-access=allow
+        --enable-native-access=ALL-UNNAMED
+        -Dio.netty.tryReflectionSetAccessible=true
+    volumes:
+      - ./target:/builder/target:ro
+      - compat-appdb:/metabase-data
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - >-
+        test -s /builder/target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar;
+        cp /builder/target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar /plugins/flightsql-metabase-driver.jar;
+        exec /app/run_metabase.sh
+
+volumes:
+  compat-maven:
+  compat-appdb:
