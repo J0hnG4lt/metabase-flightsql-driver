@@ -1,0 +1,55 @@
+name: demo (OrionBelt)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'demos/orionbelt/**'
+      - 'src/**'
+      - 'resources/**'
+      - 'project.clj'
+      - 'scripts/agent_smoke.py'
+      - '.github/workflows/orionbelt-demo.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  semantic-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - name: Independent oracle negative controls
+        run: |
+          python -m unittest discover -s demos/orionbelt -p test_oracle.py -v
+          python -m unittest discover -s demos/orionbelt -p test_verification.py -v
+      - name: Start, seed, provision dashboard and verify all query paths
+        run: python -u demos/orionbelt/run.py up
+      - name: Upstream compatibility regression tests
+        run: >-
+          docker compose -p flightsql-orionbelt -f demos/orionbelt/compose.yaml
+          run --rm --entrypoint python seed -m unittest discover -s /demo -p test_flight_compat.py -v
+      - name: Verify provisioning is repeatable
+        run: python -u demos/orionbelt/run.py up --skip-build
+      - name: Collect service logs
+        if: always()
+        run: |
+          mkdir -p .logs/orionbelt
+          docker compose -p flightsql-orionbelt -f demos/orionbelt/compose.yaml logs --no-color > .logs/orionbelt/services.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orionbelt-semantic-evidence
+          path: |
+            .logs/orionbelt/verification.json
+            .logs/orionbelt/metadata.json
+            .logs/orionbelt/mcp-model.json
+            .logs/orionbelt/services.log
+      - name: Stop isolated services
+        if: always()
+        run: python demos/orionbelt/run.py stop

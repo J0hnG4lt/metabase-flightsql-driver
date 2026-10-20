@@ -1,0 +1,63 @@
+services:
+  seed:
+    image: docker.io/ralforion/orionbelt-semantic-layer-flight:2.34.0@sha256:ce2c4c4e6b7257908dc0c08c56ff275df57c1ac8f9066a894854c9e9a029f1ba
+    user: "0:0"
+    entrypoint: [python, /demo/seed.py, /data/commerce-v1.duckdb]
+    volumes:
+      - .:/demo:ro
+      - fixture:/data
+  orionbelt:
+    image: docker.io/ralforion/orionbelt-semantic-layer-flight:2.34.0@sha256:ce2c4c4e6b7257908dc0c08c56ff275df57c1ac8f9066a894854c9e9a029f1ba
+    entrypoint: [python, /demo/flight_compat.py]
+    environment:
+      MODEL_DIR: /demo
+      MODEL_FILES: commerce.yaml
+      DUCKDB_DATABASE: /data/commerce-v1.duckdb
+      DB_VENDOR: duckdb
+      QUERY_EXECUTE: "true"
+      FLIGHT_ENABLED: "true"
+      AUTH_MODE: none
+    ports:
+      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:18815:8815"
+    volumes:
+      - .:/demo:ro
+      - fixture:/data:ro
+  mcp:
+    image: docker.io/ralforion/orionbelt-semantic-layer-mcp:2.34.0@sha256:07c5733d2d873ac0e13ebcf2937239babebca2a5f470b1639c2f4fa2c1312868
+    environment:
+      API_BASE_URL: http://orionbelt:8080
+      MCP_TRANSPORT: http
+      MCP_STATELESS_HTTP: "true"
+    ports:
+      - "127.0.0.1:19000:9000"
+    depends_on:
+      orionbelt:
+        condition: service_started
+  metabase:
+    image: docker.io/metabase/metabase:v0.64.2.9
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      MB_SITE_URL: http://127.0.0.1:3002
+      MB_DB_FILE: /metabase-data/metabase.db
+      MB_ANON_TRACKING_ENABLED: "false"
+      JAVA_OPTS: >-
+        -Xmx1024m
+        --add-opens=java.base/java.nio=ALL-UNNAMED
+        --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+        --sun-misc-unsafe-memory-access=allow
+        --enable-native-access=ALL-UNNAMED
+        -Dio.netty.tryReflectionSetAccessible=true
+    volumes:
+      - ../../target:/artifacts:ro
+      - appdb:/metabase-data
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - >-
+        test -s /artifacts/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar;
+        cp /artifacts/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar /plugins/flightsql-metabase-driver.jar;
+        exec /app/run_metabase.sh
+volumes:
+  fixture:
+  appdb:

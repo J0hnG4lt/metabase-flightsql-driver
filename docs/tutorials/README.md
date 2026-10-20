@@ -9,6 +9,10 @@ this repo, so the steps are runnable, not hypothetical.
 
 ## Before you start
 
+The [OrionBelt semantic-consistency tutorial](orionbelt-shared-semantics.md)
+uses its own isolated stack on port **3002** and includes its own setup command.
+It does not require the default stack below.
+
 1. Deploy the stack (see the [main README](../../README.md#quick-start)):
    ```bash
    podman-compose up -d
@@ -24,20 +28,21 @@ this repo, so the steps are runnable, not hypothetical.
 
 ## Use-case × backend matrix
 
-| Use case | Tutorial | Dremio | Spice.ai | GizmoSQL | InfluxDB 3 | quack | Doris/SR | kamu |
-|---|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| Iceberg lakehouse (read/write) | ✅ [iceberg-lakehouse](iceberg-lakehouse.md) | ★ | ✓ | ✓ | | | | |
-| Transformations inside Metabase | ✅ [transformations-in-metabase](transformations-in-metabase.md) | ✓ | | ★ | | | ✓ | |
-| Caching / query acceleration | ✅ [caching-acceleration](caching-acceleration.md) | | ★ | | | | | |
-| Real-time / CDC / live OLAP | ✅ [realtime-analytics](realtime-analytics.md) | | ★ | | ✓ | | ✓ | |
-| CSV uploads → typed model | ✅ [csv-uploads](csv-uploads.md) | ✓ | | ★ | | | ✓ | |
-| Federation / semantic layer | ✅ [federation-semantic-layer](federation-semantic-layer.md) | ★ | ★ | | | | | |
-| Time-series analytics | ✅ [timeseries](timeseries.md) | | ✓ | | ★ | | | |
-| Local / embedded (Parquet, no warehouse) | ✅ [local-embedded-analytics](local-embedded-analytics.md) | | | ★ | | ✓ | | |
-| Write-back / actions (SQL) | ✅ [writeback-actions](writeback-actions.md) | ✓ | | ✓ | | | ✓ | |
-| CRUD app (dashboard buttons/forms) | ✅ [crud-app-gizmosql](crud-app-gizmosql.md) | ✓ | | ★ | | | ✓ | |
-| Verifiable / time-travel BI (bitemporal, audit trail) | ✅ [verifiable-timetravel-bi](verifiable-timetravel-bi.md) | | | | | | | ★ |
-| Every authentication mode | ✅ [auth-cookbook](auth-cookbook.md) | user/pass | API-key, anon | user/pass, JWT, mTLS, OAuth | bearer | tenant/pool | user/pass | anon |
+| Use case | Tutorial | Dremio | Spice.ai | GizmoSQL | InfluxDB 3 | quack | Doris/SR | kamu | OrionBelt |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Iceberg lakehouse (read/write) | ✅ [iceberg-lakehouse](iceberg-lakehouse.md) | ★ | ✓ | ✓ | | | | | |
+| Transformations inside Metabase | ✅ [transformations-in-metabase](transformations-in-metabase.md) | ✓ | | ★ | | | ✓ | | |
+| Caching / query acceleration | ✅ [caching-acceleration](caching-acceleration.md) | | ★ | | | | | | |
+| Real-time / CDC / live OLAP | ✅ [realtime-analytics](realtime-analytics.md) | | ★ | | ✓ | | ✓ | | |
+| CSV uploads → typed model | ✅ [csv-uploads](csv-uploads.md) | ✓ | | ★ | | | ✓ | | |
+| Federation / semantic layer | ✅ [federation-semantic-layer](federation-semantic-layer.md) | ★ | ★ | | | | | | |
+| Shared metrics in dashboards and AI, independently verified | ✅ [orionbelt-shared-semantics](orionbelt-shared-semantics.md) | | | | | | | | ★ |
+| Time-series analytics | ✅ [timeseries](timeseries.md) | | ✓ | | ★ | | | | |
+| Local / embedded (Parquet, no warehouse) | ✅ [local-embedded-analytics](local-embedded-analytics.md) | | | ★ | | ✓ | | | |
+| Write-back / actions (SQL) | ✅ [writeback-actions](writeback-actions.md) | ✓ | | ✓ | | | ✓ | | |
+| CRUD app (dashboard buttons/forms) | ✅ [crud-app-gizmosql](crud-app-gizmosql.md) | ✓ | | ★ | | | ✓ | | |
+| Verifiable / time-travel BI (bitemporal, audit trail) | ✅ [verifiable-timetravel-bi](verifiable-timetravel-bi.md) | | | | | | | ★ | |
+| Every authentication mode | ✅ [auth-cookbook](auth-cookbook.md) | user/pass | API-key, anon | user/pass, JWT, mTLS, OAuth | bearer | tenant/pool | user/pass | anon | |
 
 ★ = the backend the tutorial is built around · ✓ = also works · ✅ = tutorial complete
 
@@ -59,6 +64,7 @@ Host is the compose service name; the driver connects over the metanet1 network.
 | quack-on-demand | `quack-on-demand` | 31338 | Username `admin` / Password `admin` | [backends/quack](../backends/quack.md) |
 | Doris / StarRocks | `doris` / `starrocks` | 8070 / 9408 | Username `root`, empty password | [backends/doris-starrocks](../backends/doris-starrocks.md) |
 | kamu (ODF) | `kamu` | 50050 | Username `anonymous` / Password `anonymous` | [backends/kamu](../backends/kamu.md) |
+| OrionBelt (isolated demo) | `orionbelt` | 8815 | None; loopback demo only | [backends/orionbelt](../backends/orionbelt.md) |
 
 ## How every tutorial is structured
 
@@ -71,4 +77,4 @@ Setup, all supported auth modes, feature support, and known gotchas per engine:
 [Dremio](../backends/dremio.md) · [Spice.ai](../backends/spice.md) ·
 [GizmoSQL](../backends/gizmosql.md) · [InfluxDB 3](../backends/influxdb3.md) ·
 [quack-on-demand](../backends/quack.md) · [Doris/StarRocks](../backends/doris-starrocks.md) ·
-[kamu](../backends/kamu.md)
+[kamu](../backends/kamu.md) · [OrionBelt](../backends/orionbelt.md)

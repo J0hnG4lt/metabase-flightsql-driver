@@ -22,13 +22,20 @@ shine.* Hands-on, screenshot-driven guides live in
 real-time analytics, transformations inside Metabase, CSV uploads, federation,
 time-series, and more.
 
-**Twelve tutorials, each complete and screenshot-driven** — Iceberg lakehouse,
+**Thirteen tutorials, each complete and screenshot-driven** — Iceberg lakehouse,
 transformations, CSV uploads, caching/acceleration, local/embedded analytics,
 federation/semantic layer, write-back, a [CRUD app with dashboard
 buttons/forms](docs/tutorials/crud-app-gizmosql.md) (Metabase **Actions**),
 [verifiable time-travel & audit-trail BI](docs/tutorials/verifiable-timetravel-bi.md)
 (kamu/ODF bitemporal data), auth cookbook, time-series, and real-time.
 See the [use-case × backend matrix](docs/tutorials/README.md) to pick one.
+
+**[OrionBelt: one definition, two interfaces](demos/orionbelt/README.md)** adds a
+complete Metabase 64 dashboard and Claude/Codex MCP walkthrough over a shared
+commerce semantic model. It checks 270 query results and 45 saved-card/filter
+results against an independent oracle, with real screenshots and documented
+compatibility adapters. Start with the
+[guided tutorial](docs/tutorials/orionbelt-shared-semantics.md).
 
 Per-backend setup, auth modes, feature support, and gotchas:
 **[docs/backends/](docs/backends/)** — Dremio · Spice.ai · GizmoSQL · InfluxDB 3 ·

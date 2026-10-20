@@ -1,0 +1,99 @@
+version: 1.0
+name: commerce
+description: >-
+  Synthetic commerce in EUR. Revenue is booked order value before refunds.
+  Refunds are attributed to the original order date and region, not refund date.
+  Net Revenue subtracts refunds; missing refunds mean zero. Average Order Value
+  divides revenue by distinct orders at the requested grain. Customers can occur
+  in several months, so monthly distinct counts must not be added into a total.
+settings:
+  defaultDialect: duckdb
+  defaultNumericDataType: decimal(18, 2)
+  defaultTimezone: UTC
+  overrideDatabaseTimezone: true
+dataObjects:
+  Order Context:
+    code: order_context
+    schema: main
+    columns:
+      Order ID: {code: order_id, abstractType: int, primaryKey: true}
+      Order Date: {code: order_date, abstractType: date}
+      Month: {code: month, abstractType: string}
+      Region: {code: region, abstractType: string}
+  Orders:
+    code: orders
+    schema: main
+    columns:
+      Order ID: {code: order_id, abstractType: int, primaryKey: true}
+      Order Date: {code: order_date, abstractType: date}
+      Month: {code: month, abstractType: string}
+      Region: {code: region, abstractType: string}
+      Customer: {code: customer, abstractType: string}
+      Amount: {code: amount, abstractType: float}
+    joins:
+      - joinType: one-to-one
+        joinTo: Order Context
+        columnsFrom: [Order ID]
+        columnsTo: [Order ID]
+  Items:
+    code: items
+    schema: main
+    columns:
+      Item ID: {code: item_id, abstractType: int, primaryKey: true}
+      Order ID: {code: order_id, abstractType: int}
+      Quantity: {code: quantity, abstractType: int}
+    joins:
+      - joinType: many-to-one
+        joinTo: Order Context
+        columnsFrom: [Order ID]
+        columnsTo: [Order ID]
+  Refund Events:
+    code: covered_refunds
+    schema: main
+    columns:
+      Refund ID: {code: refund_id, abstractType: int}
+      Order ID: {code: order_id, abstractType: int}
+      Amount: {code: amount, abstractType: float}
+    joins:
+      - joinType: many-to-one
+        joinTo: Order Context
+        columnsFrom: [Order ID]
+        columnsTo: [Order ID]
+dimensions:
+  Region: {dataObject: Order Context, column: Region, resultType: string}
+  Month: {dataObject: Order Context, column: Month, resultType: string}
+  Order Date: {dataObject: Order Context, column: Order Date, resultType: date}
+measures:
+  Revenue:
+    aggregation: sum
+    dataType: decimal(18, 2)
+    columns: [{dataObject: Orders, column: Amount}]
+  Refund Amount:
+    aggregation: sum
+    dataType: decimal(18, 2)
+    columns: [{dataObject: Refund Events, column: Amount}]
+  Order Count:
+    aggregation: count_distinct
+    dataType: bigint
+    columns: [{dataObject: Orders, column: Order ID}]
+  Customer Count:
+    aggregation: count_distinct
+    dataType: bigint
+    columns: [{dataObject: Orders, column: Customer}]
+  Units:
+    aggregation: sum
+    dataType: bigint
+    columns: [{dataObject: Items, column: Quantity}]
+metrics:
+  Refunds:
+    expression: 'COALESCE({[Refund Amount]}, 0)'
+    dataType: decimal(18, 2)
+  Net Revenue:
+    expression: '{[Revenue]} - COALESCE({[Refund Amount]}, 0)'
+    dataType: decimal(18, 2)
+  Average Order Value:
+    expression: '{[Revenue]} / NULLIF({[Order Count]}, 0)'
+    dataType: decimal(18, 4)
+  Refund Rate:
+    expression: 'COALESCE({[Refund Amount]}, 0) / NULLIF({[Revenue]}, 0)'
+    dataType: decimal(18, 6)
