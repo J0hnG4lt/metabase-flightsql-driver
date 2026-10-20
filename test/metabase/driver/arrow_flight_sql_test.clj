@@ -7,6 +7,7 @@
    [metabase.driver :as driver]
    [metabase.driver.arrow-flight-sql]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
+   [metabase.driver.sql.query-processor :as sql.qp]
    [metabase.test :as mt]))
 
 (set! *warn-on-reflection* true)
@@ -78,6 +79,20 @@
              (normalize {:use-token false :username "u"}))))))
 
 ;;; --------------------------- integration tests --------------------------
+
+(deftest absolute-datetime-clause-formats-test
+  (testing "Metabase 63 and 64 emit the same typed temporal literals"
+    (doseq [[value unit expected]
+            [[(java.time.LocalDate/parse "2024-01-15") :day "DATE '2024-01-15'"]
+             [(java.time.LocalDateTime/parse "2024-01-15T10:30:00") :default
+              "TIMESTAMP '2024-01-15 10:30:00'"]
+             [(java.time.LocalTime/parse "10:30:00") :default "TIME '10:30:00'"]
+             [(java.time.OffsetDateTime/parse "2024-01-15T10:30:00Z") :default
+              "TIMESTAMP '2024-01-15 10:30:00'"]]]
+      (doseq [clause [[:absolute-datetime value unit]
+                      [:absolute-datetime {} value unit]
+                      [:absolute-datetime {:lib/uuid "temporal-regression"} value unit]]]
+        (is (= [:raw expected] (sql.qp/->honeysql :arrow-flight-sql clause)))))))
 
 (deftest ^:parallel basic-aggregation-test
   (mt/test-driver :arrow-flight-sql

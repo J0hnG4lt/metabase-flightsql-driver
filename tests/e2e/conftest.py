@@ -7,6 +7,7 @@ Optional stacks enable extra tests when present:
   - influxdb3 (seeded via scripts/setup_influxdb3.py)
 """
 import json
+import os
 import socket
 import time
 import urllib.error
@@ -16,7 +17,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BASE = "http://localhost:3000"
+BASE = os.environ.get("METABASE_URL", "http://localhost:3000").rstrip("/")
 
 
 def load_env():
@@ -42,6 +43,24 @@ def port_open(host, port, timeout=2):
         return False
 
 
+def pytest_addoption(parser):
+    parser.addoption("--require-backend", action="append", default=[],
+                     choices=("influxdb3", "dremio"),
+                     help="Fail setup instead of skipping an unavailable backend; repeatable.")
+
+
+def pytest_sessionstart(session):
+    for backend in session.config.getoption("--require-backend"):
+        if backend == "influxdb3":
+            ready = bool(ENV.get("INFLUXDB3_TOKEN")) and port_open("localhost", 8181)
+        else:
+            ready = ENV.get("DREMIO_READY") == "1" and port_open("localhost", 32010)
+        if not ready:
+            raise pytest.UsageError(
+                f"Required backend {backend} is not ready; run scripts/setup_{backend}.py "
+                "and inspect the container logs. Refusing to skip its tests.")
+
+
 class MetabaseClient:
     def __init__(self, api_key):
         self.api_key = api_key
@@ -55,10 +74,11 @@ class MetabaseClient:
             with urllib.request.urlopen(r, timeout=timeout) as resp:
                 return resp.status, json.loads(resp.read() or b"null")
         except urllib.error.HTTPError as e:
+            body = e.read()
             try:
-                return e.code, json.loads(e.read() or b"null")
-            except Exception:
-                return e.code, None
+                return e.code, json.loads(body or b"null")
+            except (ValueError, UnicodeDecodeError):
+                return e.code, {"error": body.decode("utf-8", errors="replace")}
 
     def get(self, path):
         return self.req("GET", path)
@@ -92,6 +112,20 @@ class MetabaseClient:
 @pytest.fixture(scope="session")
 def mb():
     return MetabaseClient(ENV["METABASE_API_KEY"])
+
+
+@pytest.fixture(scope="session")
+def demo_dashboard(mb):
+    status, dashboards = mb.get("/api/dashboard")
+    assert status == 200, dashboards
+    rows = dashboards["data"] if isinstance(dashboards, dict) else dashboards
+    matches = [d for d in rows if d.get("name") == "FlightSQL Driver Test Dashboard v2"]
+    assert matches, "test dashboard missing — run scripts/metabase_setup.py"
+    # Setup can run repeatedly without resetting the application database.
+    latest = max(matches, key=lambda d: d["id"])
+    status, dashboard = mb.get(f"/api/dashboard/{latest['id']}")
+    assert status == 200, dashboard
+    return dashboard
 
 
 @pytest.fixture()

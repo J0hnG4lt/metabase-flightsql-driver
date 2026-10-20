@@ -1,0 +1,14 @@
+# Project config loads after the repository is trusted. Authenticate once with
+# `codex mcp login metabase`; credentials stay in Codex's user credential store.
+[mcp_servers.metabase]
+url = "http://127.0.0.1:3000/api/metabase-mcp"
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+
+# Optional community fallback for pre-64 installations. Enable only when needed.
+[mcp_servers.metabase-community]
+command = "python"
+args = ["scripts/community_mcp.py"]
+env_vars = ["METABASE_API_KEY", "METABASE_URL"]
+enabled = false
+startup_timeout_sec = 60

@@ -12,12 +12,16 @@ name: e2e (backends)
 on:
   workflow_dispatch:
     inputs:
+      run_dremio:
+        description: "Run Dremio OSS authentication, schema and Iceberg tests"
+        type: boolean
+        default: true
       run_heavy_backends:
         description: "Also run the heavy backend jobs — Dremio (expected to PASS: reads Iceberg over Flight SQL) and Doris/StarRocks (expected to FAIL: all-in-one images advertise an unreachable 127.0.0.1 Flight endpoint from a separate container)"
         type: boolean
         default: false
   schedule:
-    - cron: "0 6 * * 1"   # Mondays 06:00 UTC — default backends only
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC — default backends + Dremio
 
 # The runner has both podman and docker; the compose stack is created with
 # docker, so the setup scripts' container-exec must use docker too.
@@ -57,21 +61,27 @@ jobs:
           echo "Metabase did not become healthy"; docker compose logs metabase | tail -50; exit 1
 
       - name: Seed connections, dashboards, data
-        # metabase_setup is required (gizmo + spice + dashboards); the InfluxDB
-        # and quack seeds are best-effort so a single flaky backend doesn't
-        # block the rest of the suite (their tests skip/fail in isolation).
+        # InfluxDB is required: a startup/seed regression must fail the job.
         run: |
           python scripts/metabase_setup.py
-          python scripts/setup_influxdb3.py || echo "::warning::influxdb3 seed failed; its tests will skip/fail"
+          python scripts/setup_influxdb3.py
           python scripts/provision_quack_dashboard.py || echo "::warning::quack provisioning failed; its tests will skip/fail"
 
       - name: Run e2e suite
-        run: python -m pytest tests/e2e -v --tb=short
+        run: python -m pytest tests/e2e -v -rs --tb=short --require-backend influxdb3 --junitxml=e2e-results.xml
         # TLS/OAuth run; Doris/StarRocks auto-skip (their profiles aren't up here)
 
-      - name: Metabase logs on failure
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: default-backend-test-results
+          path: e2e-results.xml
+
+      - name: Metabase and InfluxDB logs on failure
         if: failure()
-        run: docker compose logs metabase | tail -100
+        run: |
+          docker compose logs metabase | tail -100
+          docker logs influxdb3 2>&1 | tail -100
 
   doris:
     # Opt-in only (never on the weekly schedule): the all-in-one image's FE
@@ -171,13 +181,13 @@ jobs:
           docker logs starrocks 2>&1 | tail -60 || true
 
   dremio:
-    # Opt-in (heavy: ~4 GB RAM, ~1-2 min first boot) but EXPECTED TO PASS.
+    # Run separately (~4 GB RAM) on schedules and by default on manual runs.
     # Single-node Dremio is one JVM that serves Flight SQL results inline, so —
     # unlike Doris/StarRocks — it is reachable from a separate Metabase
     # container. NOT continue-on-error: a failure here is a real regression.
     # Reads/writes Apache Iceberg (Dremio's default table format), so it is also
     # the suite's Iceberg-over-Flight-SQL proof.
-    if: github.event_name == 'workflow_dispatch' && inputs.run_heavy_backends
+    if: github.event_name == 'schedule' || inputs.run_dremio || inputs.run_heavy_backends
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -206,7 +216,13 @@ jobs:
           python scripts/setup_dremio.py
 
       - name: Run Dremio tests
-        run: python -m pytest tests/e2e/test_dremio.py -v --tb=short
+        run: python -m pytest tests/e2e/test_dremio.py -v -rs --tb=short --require-backend dremio --junitxml=dremio-results.xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dremio-test-results
+          path: dremio-results.xml
 
       - name: Logs on failure
         if: failure()

@@ -7,14 +7,9 @@ def test_demo_connections_exist(mb):
     assert "gizmo" in dbs and "flight" in dbs
 
 
-def test_dashboard_shape(mb):
-    _, dashboards = mb.get("/api/dashboard")
-    rows = dashboards["data"] if isinstance(dashboards, dict) and "data" in dashboards else dashboards
-    target = next((d for d in rows if "FlightSQL" in (d.get("name") or "")), None)
-    assert target, "test dashboard missing — run scripts/metabase_setup.py"
-    _, dash = mb.get(f"/api/dashboard/{target['id']}")
-    assert len(dash["dashcards"]) == 32
-    assert len(dash["parameters"]) == 5
+def test_dashboard_shape(demo_dashboard):
+    assert len(demo_dashboard["dashcards"]) == 32
+    assert len(demo_dashboard["parameters"]) == 5
 
 
 def test_native_queries_both_backends(mb):
@@ -40,12 +35,13 @@ def test_legacy_plain_token_connection(mb, db_factory):
     assert res.get("status") == "completed", res.get("error")
 
 
-def test_filtered_query_via_dashboard_parameter(mb):
-    _, dash = mb.get("/api/dashboard/2")
-    card_id = next(dc["card_id"] for dc in dash["dashcards"]
-                   for pm in dc.get("parameter_mappings") or []
-                   if pm.get("parameter_id") == "status")
-    _, res = mb.post(f"/api/card/{card_id}/query", {
-        "parameters": [{"type": "string/=", "value": ["Delivered"],
-                        "target": ["dimension", ["template-tag", "status"]]}]})
-    assert res.get("status") == "completed" and len(res["data"]["rows"]) > 0
+def test_filtered_query_via_dashboard_parameter(mb, demo_dashboard):
+    card_id, mapping = next((dc["card_id"], pm) for dc in demo_dashboard["dashcards"]
+                            for pm in dc.get("parameter_mappings") or []
+                            if pm.get("parameter_id") == "status")
+    parameter = next(p for p in demo_dashboard["parameters"] if p["id"] == mapping["parameter_id"])
+    status, res = mb.post(f"/api/card/{card_id}/query", {
+        "parameters": [{"id": parameter["id"], "type": parameter["type"], "value": ["Delivered"],
+                        "target": mapping["target"]}]})
+    assert status in (200, 202) and res.get("status") == "completed", (status, res)
+    assert res["data"]["rows"]

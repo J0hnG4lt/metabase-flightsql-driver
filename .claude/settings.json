@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(podman compose:*)",
+      "Bash(podman-compose:*)",
       "Bash(podman logs:*)",
       "Bash(podman ps:*)",
       "Bash(podman machine start:*)",

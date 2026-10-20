@@ -17,13 +17,10 @@ import time
 
 import pytest
 
-from conftest import ENV, GIZMO_DETAILS, port_open
+from conftest import GIZMO_DETAILS
 
-requires_gizmo = pytest.mark.skipif(
-    not port_open("localhost", 31337),
-    reason="gizmosql not running (base stack)")
-
-pytestmark = requires_gizmo
+# The backend must be reachable from Metabase, not necessarily from the test
+# runner. The isolated compatibility stack deliberately does not publish 31337.
 
 ACTIONS_DETAILS = {**GIZMO_DETAILS, "enable-uploads": True, "enable-actions": True}
 

@@ -1,8 +1,7 @@
 services:
   builder:
     build:
-      context: .
-      dockerfile: Dockerfile.lein
+      context: ./containers/driver-builder
     working_dir: /builder
     volumes:
       - jar-volume:/builder/target
@@ -14,7 +13,7 @@ services:
     restart: "no"
 
   metabase:
-    image: metabase/metabase:v0.63.1.6
+    image: metabase/metabase:v0.64.2.9
     container_name: metabase
     hostname: metabase
     depends_on:
@@ -48,6 +47,9 @@ services:
         --sun-misc-unsafe-memory-access=allow
         --enable-native-access=ALL-UNNAMED
         -Dio.netty.tryReflectionSetAccessible=true
+      MB_SITE_URL: http://127.0.0.1:3000
+      # Metabase 64 requires explicit opt-in even for self-hosted basic transforms.
+      MB_TRANSFORMS_ENABLED: "true"
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabaseappdb
       MB_DB_PORT: 5432
@@ -57,7 +59,7 @@ services:
     networks:
       - metanet1
     healthcheck:
-      test: ["CMD", "curl", "--fail", "-I", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "--fail", "-I", "http://127.0.0.1:3000/api/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -130,7 +132,7 @@ services:
   # Seed with: python scripts/setup_influxdb3.py  (creates admin token ->
   # .env INFLUXDB3_TOKEN, writes sample data into the `demo` database).
   influxdb3:
-    image: influxdb:3-core
+    image: influxdb:3.12.1-core
     container_name: influxdb3
     hostname: influxdb3
     command:
@@ -138,9 +140,11 @@ services:
       - serve
       - --node-id=node0
       - --object-store=file
-      - --data-dir=/var/lib/influxdb3/data
+      - --data-dir=/var/lib/influxdb3
     volumes:
-      - influxdb3-data:/var/lib/influxdb3/data
+      # This directory exists in the image and belongs to uid 1500. Docker
+      # creates a missing /data mount point as root, which prevents startup.
+      - influxdb3-data:/var/lib/influxdb3
     ports:
       - "8181:8181"
     networks:

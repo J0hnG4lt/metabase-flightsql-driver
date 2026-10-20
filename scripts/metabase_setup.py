@@ -16,14 +16,14 @@ import json
 import time
 import requests
 from typing import Optional, Dict, Any, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
 @dataclass
 class MetabaseConfig:
     """Configuration for Metabase connection"""
-    base_url: str = "http://localhost:3000"
+    base_url: str = field(default_factory=lambda: os.environ.get("METABASE_URL", "http://localhost:3000").rstrip("/"))
     admin_email: str = "admin@metabase.local"
     admin_password: str = "Metabase123!"
     admin_first_name: str = "Admin"
@@ -129,7 +129,7 @@ class MetabaseClient:
             print("No setup token available - setup may already be complete")
             return False
 
-        print(f"Performing initial setup with token: {token[:8]}...")
+        print("Performing initial setup")
 
         setup_data = {
             "token": token,
@@ -149,7 +149,7 @@ class MetabaseClient:
         result = self._request("POST", "setup", setup_data)
         if result.get("id"):
             self.session_token = result["id"]
-            print(f"Setup complete! Session ID: {self.session_token[:8]}...")
+            print("Setup complete")
             return True
         print(f"Setup failed: {result}")
         return False
@@ -196,7 +196,7 @@ class MetabaseClient:
 
         if result.get("unmasked_key"):
             key = result["unmasked_key"]
-            print(f"API key created: {key[:20]}...")
+            print("API key created")
             return key
         print(f"Failed to create API key: {result}")
         return None
@@ -1451,7 +1451,7 @@ def main():
     # Try to use existing API key from env first
     env_key = os.environ.get("METABASE_API_KEY")
     if env_key:
-        print(f"\n--- Using API key from .env: {env_key[:20]}... ---")
+        print("\n--- Using API key from .env ---")
         client.set_api_key(env_key)
         dbs = client.get_databases()
         if isinstance(dbs, dict) and "API" not in str(dbs.get("text", "")):

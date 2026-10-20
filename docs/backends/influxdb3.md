@@ -13,6 +13,16 @@ python scripts/setup_influxdb3.py    # creates an admin token, writes it to .env
                                      # as INFLUXDB3_TOKEN, loads sample data into `demo`
 ```
 
+The test stack pins `influxdb:3.12.1-core`. Its named volume is mounted at
+`/var/lib/influxdb3`, which already belongs to the image's unprivileged user.
+Mounting at a nonexistent `/var/lib/influxdb3/data` can create a root-owned
+directory on Docker and make startup fail. The data-directory setting moves
+with the mount, preserving the existing volume's layout.
+
+CI requires seed and verification queries to succeed. If setup fails, inspect
+`podman logs influxdb3`; restore an existing token in `.env` when necessary.
+Routine setup never deletes volumes.
+
 ## Connection
 
 | Field | Value |

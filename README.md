@@ -45,14 +45,14 @@ query — so the "verified on" column below is evidence, not a claim.
 
 | Driver release | Built against | Verified on | Arrow JDBC | JDK note |
 |---|---|---|---|---|
-| unreleased (main) | Metabase v0.63.1 | 0.63.1 (required) · 0.62.5\* | 19.0.0 | 0.63 runs JDK 25 — see *Java / JVM requirements* |
+| unreleased | Metabase v0.64.2.9 | 0.64.2.9 + 0.63.1.6 required in CI | 19.0.0 | Runtime images use JDK 25; keep the Arrow flags below |
 | 0.1.0 | v0.62.5 + v0.63.1 | — | 19.0.0 | shipped two jars (`-mb62`/`-mb63`); **now consolidated to one** |
 | 0.0.9 | v0.62.4 | — | 18.2.0 | |
 | 0.0.5 – 0.0.8 | v0.55 – v0.62 | — | 18.2.0 | |
 
-The driver targets **Metabase 0.63+**. \*0.62.5 is a best-effort/informational
-smoke check (it EOLs 2026-09-01). On older Metabase, use an earlier driver
-release or upgrade Metabase.
+The driver targets **Metabase 0.64**, with **0.63 compatibility** retained and
+required in CI. The EOL 0.62 line is no longer tested; use an earlier driver
+release or upgrade Metabase. Required checks must pass before releasing.
 
 > **Why one jar (not per-version)?** The driver is a single source file; the old
 > `-mb62`/`-mb63` split just AOT-compiled it against two Metabase checkouts. The
@@ -100,7 +100,7 @@ Behavior changes to be aware of:
 - `convertTimezone()` no longer appears in the expression editor — it was advertised but never worked.
 - FK metadata is no longer probed during sync (it always returned nothing anyway); Metabase-side semantic/FK settings are unaffected.
 - Release assets are now a **single jar** — `arrow-flight-sql.metabase-driver.jar` (0.1.0 shipped separate `-mb62`/`-mb63` jars; these are consolidated). Update any download automation that pinned the per-line names.
-- Built against Metabase v0.63.1 and CI-verified to load and query on it; bundles Arrow Flight SQL JDBC 19.0.0.
+- The next release builds against Metabase v0.64.2.9 and requires runtime checks on both 64 and 63; Arrow Flight SQL JDBC remains 19.0.0.
 
 ## Installation
 
@@ -122,7 +122,7 @@ Behavior changes to be aware of:
 2. Start all services
 
    ```bash
-   podman compose up -d
+   podman-compose up -d
    ```
 
 3. Wait for Metabase to be ready (takes ~1-2 minutes for JAR build + Metabase startup)
@@ -309,8 +309,8 @@ The project includes comprehensive end-to-end testing:
 
 ```bash
 # Clean start (removes all data)
-podman compose down -v
-podman compose up -d
+podman-compose down -v
+podman-compose up -d
 
 # Wait for Metabase, then run setup
 python scripts/metabase_setup.py
@@ -326,9 +326,9 @@ The setup script creates a test dashboard with:
 - **5 field filters** (Order Status, Country, Department, Marketing Channel, Date Range)
 - **3 test schemas** in GizmoSQL (sales, hr, analytics)
 
-### Claude Code Integration
+### Claude Code and Codex integration
 
-If using Claude Code, run `/e2e-test` for guided end-to-end testing instructions.
+Run `/e2e-test` in Claude Code or `$e2e-test` in Codex for the shared end-to-end testing workflow.
 
 ## Features Tested
 
@@ -364,10 +364,10 @@ podman logs metabase 2>&1 | grep "connections:"
 
 ### Rebuild driver after code changes
 ```bash
-podman compose down metabase builder
-podman compose up -d builder
+podman-compose down metabase builder
+podman-compose up -d builder
 # Wait ~30 seconds for build
-podman compose up -d metabase
+podman-compose up -d metabase
 ```
 
 ## License
@@ -387,3 +387,11 @@ Contributions are welcome! If you have suggestions or improvements, please open 
 ## Contact
 
 For additional information or support, please open an issue in the repository or contact the maintainer at [georvic.tur@gmail.com].
+
+## Working with Claude Code or Codex
+
+Both runtimes share [AGENTS.md](AGENTS.md) and six workflows. See
+[agent setup](docs/agents/setup.md) for official Metabase MCP/CLI authentication,
+[development workflows](docs/agents/driver-dev.md), and the
+[isolated compatibility stack](docs/agents/compatibility.md). Local commands use
+pip-installed `podman-compose`; routine E2E runs preserve existing data.

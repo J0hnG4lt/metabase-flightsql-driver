@@ -11,12 +11,30 @@ python scripts/metabase_setup.py
 ./scripts/generate_tls_certs.sh
 podman-compose -f docker-compose.yaml -f docker-compose.tls.yaml up -d
 
-# 3. Optional: seed InfluxDB 3 (token -> .env)
+# 3. Seed InfluxDB 3 (required in CI; token -> .env)
 python scripts/setup_influxdb3.py
 
 # 4. Run
 python -m pytest tests/e2e -v
 ```
+
+CI requires InfluxDB setup to succeed and runs Dremio in its own job on the
+weekly schedule and by default on manual runs (`run_dremio`). Doris and
+StarRocks remain separately opt-in through `run_heavy_backends`.
+
+To reproduce the focused checks locally, start and seed Dremio as documented
+in [the backend guide](../../docs/backends/dremio.md), then run:
+
+```bash
+python -m pytest tests/e2e/test_dremio.py tests/e2e/test_new_backends.py tests/e2e/test_catalog_schema_matrix.py -k 'dremio or influxdb3' --require-backend dremio --require-backend influxdb3 -v -rs
+```
+
+`--require-backend` fails the run if that backend is not running/seeded. Without
+it, local partial-stack runs retain their availability skips. Dremio OSS still
+cannot run the PAT test: [PATs require Enterprise](https://docs.dremio.com/current/security/authentication/personal-access-tokens/).
+The six OSS tests cover password authentication, bad-password rejection,
+Iceberg reads/writes, schema discovery and inclusion filtering. A PAT test skip
+does not count as token-auth validation.
 
 | Module | Covers |
 |---|---|
