@@ -132,7 +132,7 @@ services:
   # Seed with: python scripts/setup_influxdb3.py  (creates admin token ->
   # .env INFLUXDB3_TOKEN, writes sample data into the `demo` database).
   influxdb3:
-    image: influxdb:3-core
+    image: influxdb:3.12.1-core
     container_name: influxdb3
     hostname: influxdb3
     command:
@@ -140,9 +140,11 @@ services:
       - serve
       - --node-id=node0
       - --object-store=file
-      - --data-dir=/var/lib/influxdb3/data
+      - --data-dir=/var/lib/influxdb3
     volumes:
-      - influxdb3-data:/var/lib/influxdb3/data
+      # This directory exists in the image and belongs to uid 1500. Docker
+      # creates a missing /data mount point as root, which prevents startup.
+      - influxdb3-data:/var/lib/influxdb3
     ports:
       - "8181:8181"
     networks:

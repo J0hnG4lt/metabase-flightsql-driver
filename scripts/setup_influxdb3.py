@@ -57,22 +57,26 @@ def main():
     env = read_env()
     token = env.get("INFLUXDB3_TOKEN")
 
-    # wait for server
+    # An unauthenticated response proves the server is up before the initial
+    # token exists. A stopped container must fail setup, not become a skip.
     for _ in range(30):
         r = podman_exec("influxdb3", "show", "databases", "--token", token or "x",
                         check=False)
-        if r.returncode == 0 or "unauthorized" in (r.stdout + r.stderr).lower() \
-           or "Unauthorized" in (r.stdout + r.stderr):
+        if r.returncode == 0 or "unauthorized" in (r.stdout + r.stderr).lower():
             break
         time.sleep(2)
+    else:
+        sys.exit(f"InfluxDB did not become ready. Inspect `{CLI} logs influxdb3`.\n"
+                 + (r.stdout + r.stderr)[-500:])
 
     if not token:
         r = podman_exec("influxdb3", "create", "token", "--admin", check=False)
         out = r.stdout + r.stderr
         m = re.search(r"(apiv3_\S+)", out)
         if not m:
-            print("Could not create admin token (already created in a previous "
-                  "run without .env?). Reset with: podman-compose down -v")
+            print("Could not create admin token. Inspect the container log; "
+                  "if this is an existing instance, restore its INFLUXDB3_TOKEN "
+                  "in .env. No data has been reset.")
             print(out[-500:])
             sys.exit(1)
         token = m.group(1)
@@ -88,6 +92,8 @@ def main():
 
     r = podman_exec("influxdb3", "query", "--database", DATABASE,
                     "--token", token, "SELECT COUNT(*) FROM weather", check=False)
+    if r.returncode != 0:
+        sys.exit("verification query failed: " + (r.stdout + r.stderr)[-400:])
     print(r.stdout.strip()[-200:] or r.stderr.strip()[-200:])
     print("influxdb3 ready: host=influxdb3 port=8181, bearer token in .env, "
           f"additional-options database={DATABASE}")

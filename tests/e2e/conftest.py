@@ -43,6 +43,24 @@ def port_open(host, port, timeout=2):
         return False
 
 
+def pytest_addoption(parser):
+    parser.addoption("--require-backend", action="append", default=[],
+                     choices=("influxdb3", "dremio"),
+                     help="Fail setup instead of skipping an unavailable backend; repeatable.")
+
+
+def pytest_sessionstart(session):
+    for backend in session.config.getoption("--require-backend"):
+        if backend == "influxdb3":
+            ready = bool(ENV.get("INFLUXDB3_TOKEN")) and port_open("localhost", 8181)
+        else:
+            ready = ENV.get("DREMIO_READY") == "1" and port_open("localhost", 32010)
+        if not ready:
+            raise pytest.UsageError(
+                f"Required backend {backend} is not ready; run scripts/setup_{backend}.py "
+                "and inspect the container logs. Refusing to skip its tests.")
+
+
 class MetabaseClient:
     def __init__(self, api_key):
         self.api_key = api_key

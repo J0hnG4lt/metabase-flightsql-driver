@@ -13,11 +13,7 @@ semantics rather than assumptions; optional stacks auto-skip.
 """
 import pytest
 
-from conftest import ENV, GIZMO_DETAILS, SPICE_HOST, port_open
-
-requires_influxdb3 = pytest.mark.skipif(
-    "INFLUXDB3_TOKEN" not in ENV or not port_open("localhost", 8181),
-    reason="influxdb3 not running/seeded")
+from conftest import ENV, GIZMO_DETAILS, SPICE_HOST, port_open, requires_influxdb3
 
 requires_quack = pytest.mark.skipif(
     not port_open("localhost", 31341),
