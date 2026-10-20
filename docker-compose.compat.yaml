@@ -4,12 +4,11 @@
 services:
   builder:
     build:
-      context: .
-      dockerfile: Dockerfile.lein
+      context: ./containers/driver-builder
     working_dir: /builder
     volumes:
-      - .:/builder:ro
-      - ./target:/builder/target
+      # Leiningen requires a writable project root even when target is writable.
+      - .:/builder
       - compat-maven:/root/.m2
     command: ["lein", "uberjar"]
     restart: "no"

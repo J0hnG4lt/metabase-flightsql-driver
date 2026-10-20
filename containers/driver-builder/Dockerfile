@@ -1,5 +1,5 @@
-# Temurin 21 matches the JDK Metabase itself runs on; the deprecated
-# openjdk:11 image predates Arrow 19's JDK 17+ requirement.
+# JDK 21 is the build baseline. Metabase 63/64 runtime images use JDK 25
+# with the Arrow JVM flags configured in compose.
 FROM eclipse-temurin:21-jdk-jammy
 
 # Install curl for downloading Leiningen

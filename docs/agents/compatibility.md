@@ -10,6 +10,12 @@ podman-compose -p flightsql-compat -f docker-compose.compat.yaml up -d metabase
 python scripts/dev.py health --url http://127.0.0.1:3001
 ```
 
+The toolchain build context contains only `containers/driver-builder/Dockerfile`;
+source and output are mounted when the builder runs. The default filename avoids
+a podman-compose 1.5 Windows issue: drive-letter contexts can be mistaken for Git
+URLs, causing custom `dockerfile` arguments to be omitted. The small context also
+avoids scanning unrelated local credentials, caches and generated artifacts.
+
 The following environment setting is PowerShell syntax (in Bash use
 `export METABASE_URL=http://127.0.0.1:3001`):
 
