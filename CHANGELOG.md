@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.7.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.6.1...0.7.0) (2026-10-20)
+
+
+### Features
+
+* support Claude and Codex workflows on Metabase 64 ([40a6162](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/40a616207df830b4b15f6d3e6de72d4b95598e51))
+* support Codex workflows and Metabase 64 ([c6cfded](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/c6cfdedfaf1d0460ae68decee2b8ab3546f2f05f))
+
+
+### Bug Fixes
+
+* enable basic transforms in Metabase 64 demo stacks ([70786b1](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/70786b103cf11f4f4bd06b04fb0708343ea923cf))
+* make fresh Podman builds work on Windows ([1fd8a3e](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/1fd8a3ed41e959e7958cc41b1d0a3be4a7061577))
+* package compatibility jars on container storage ([0fad12d](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/0fad12d4bc61f92eeb725679703ed1c419614680))
+* update REST fixtures for Metabase 64 query schemas ([cda3d5d](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/cda3d5d1b5a628914ccbd1488cad4f990efe86de))
+* use IPv4 loopback for local agent clients ([b1dbf48](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/b1dbf4874e6c0f5698722ee80fedfb3cd97ab9d0))
+
+
+### Maintenance
+
+* validate the latest Metabase 64.2.9 patch ([72197fd](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/72197fd008a65120241ceb3fb3eaf9297847da22))
+
 ## [0.6.1](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.6.0...0.6.1) (2026-08-02)
 
 
