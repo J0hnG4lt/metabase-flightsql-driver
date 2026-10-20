@@ -62,3 +62,13 @@ Mapping onto a card's template tag:
 ```
 
 Gotcha: cards render in question view but not on a dashboard → copy the card's `visualization_settings` onto the dashcard.
+
+On Metabase 64, each parameter sent to `POST /api/card/:id/query` needs a nonblank
+`id` as well as its type, value and target. Resolve these from the dashboard's
+parameter and card mapping; do not assume a fixed dashboard ID.
+
+For `POST /api/segment`, 64 derives the table from the definition and rejects the
+old top-level `table_id`. Send a full definition containing `type: "query"`,
+`database` and `query` (source table and filter), rather than a bare query fragment.
+63 still requires top-level `table_id` and the legacy fragment. Archive a segment with
+`PUT /api/segment/:id` and `{"archived": true, "revision_message": "cleanup"}`.

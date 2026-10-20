@@ -56,10 +56,11 @@ class MetabaseClient:
             with urllib.request.urlopen(r, timeout=timeout) as resp:
                 return resp.status, json.loads(resp.read() or b"null")
         except urllib.error.HTTPError as e:
+            body = e.read()
             try:
-                return e.code, json.loads(e.read() or b"null")
-            except Exception:
-                return e.code, None
+                return e.code, json.loads(body or b"null")
+            except (ValueError, UnicodeDecodeError):
+                return e.code, {"error": body.decode("utf-8", errors="replace")}
 
     def get(self, path):
         return self.req("GET", path)
@@ -93,6 +94,20 @@ class MetabaseClient:
 @pytest.fixture(scope="session")
 def mb():
     return MetabaseClient(ENV["METABASE_API_KEY"])
+
+
+@pytest.fixture(scope="session")
+def demo_dashboard(mb):
+    status, dashboards = mb.get("/api/dashboard")
+    assert status == 200, dashboards
+    rows = dashboards["data"] if isinstance(dashboards, dict) else dashboards
+    matches = [d for d in rows if d.get("name") == "FlightSQL Driver Test Dashboard v2"]
+    assert matches, "test dashboard missing — run scripts/metabase_setup.py"
+    # Setup can run repeatedly without resetting the application database.
+    latest = max(matches, key=lambda d: d["id"])
+    status, dashboard = mb.get(f"/api/dashboard/{latest['id']}")
+    assert status == 200, dashboard
+    return dashboard
 
 
 @pytest.fixture()

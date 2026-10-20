@@ -16,9 +16,8 @@ def gizmo_meta(mb):
     return {"db_id": gizmo_id, "orders": orders, "fields": fields}
 
 
-def test_all_dashboard_cards_execute(mb):
-    _, dash = mb.get("/api/dashboard/2")
-    card_ids = sorted({dc["card_id"] for dc in dash["dashcards"] if dc.get("card_id")})
+def test_all_dashboard_cards_execute(mb, demo_dashboard):
+    card_ids = sorted({dc["card_id"] for dc in demo_dashboard["dashcards"] if dc.get("card_id")})
     assert len(card_ids) >= 30
     fails = []
     for cid in card_ids:
@@ -74,11 +73,20 @@ def test_mbql_relative_date_filter(mb, gizmo_meta):
 
 def test_segment_roundtrip(mb, gizmo_meta):
     status_f = gizmo_meta["fields"]["status"]
-    status, seg = mb.post("/api/segment", {
-        "name": "e2e-delivered", "table_id": gizmo_meta["orders"]["id"],
+    body = {
+        "name": "e2e-delivered",
         "definition": {"source-table": gizmo_meta["orders"]["id"],
-                       "filter": ["=", ["field", status_f["id"], None], "Delivered"]}})
-    assert status == 200 and seg.get("id")
+                       "filter": ["=", ["field", status_f["id"], None], "Delivered"]}}
+    _, properties = mb.get("/api/session/properties")
+    # 64 derives the table from definition and rejects the old top-level key.
+    # The retained 63 line still requires table_id.
+    if int(properties["version"]["tag"].split(".")[1]) < 64:
+        body["table_id"] = gizmo_meta["orders"]["id"]
+    else:
+        body["definition"] = {"type": "query", "database": gizmo_meta["db_id"],
+                              "query": body["definition"]}
+    status, seg = mb.post("/api/segment", body)
+    assert status == 200 and seg.get("id"), (status, seg)
     try:
         _, res = mb.post("/api/dataset", {
             "type": "query", "database": gizmo_meta["db_id"],
@@ -88,8 +96,9 @@ def test_segment_roundtrip(mb, gizmo_meta):
         assert res.get("status") == "completed"
         assert res["data"]["rows"][0][0] == 6
     finally:
-        mb.req("DELETE", f"/api/segment/{seg['id']}",
-               {"revision_message": "cleanup"})
+        status, result = mb.req("PUT", f"/api/segment/{seg['id']}",
+                                {"archived": True, "revision_message": "cleanup"})
+        assert status == 200, result
 
 
 def test_metric_v2_roundtrip(mb, gizmo_meta):
