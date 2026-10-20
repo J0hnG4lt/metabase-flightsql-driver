@@ -9,8 +9,16 @@ services:
     volumes:
       # Leiningen requires a writable project root even when target is writable.
       - .:/builder
+      # Package on Linux storage: ZIP metadata writes are slow over Windows sharing.
+      - compat-build:/builder/target
+      - ./target:/artifacts
       - compat-maven:/root/.m2
-    command: ["lein", "uberjar"]
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        lein uberjar;
+        cp /builder/target/metabase-flightsql-driver-0.1.0-SNAPSHOT-standalone.jar /artifacts/
     restart: "no"
 
   gizmosql:
@@ -54,4 +62,5 @@ services:
 
 volumes:
   compat-maven:
+  compat-build:
   compat-appdb:
