@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.7.0...0.8.0) (2026-10-20)
+
+
+### Features
+
+* add verified OrionBelt semantic demo for Metabase and AI ([d3d5daa](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/d3d5daa05862d15346337e13b82a3f1e71b22bd8))
+* **demo:** verify shared OrionBelt semantics across Metabase and MCP ([79c166c](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/79c166cd5a8dff1e9afa3d6334c13cff34356c2b))
+
+
+### Documentation
+
+* **orionbelt:** explain semantic layer and driver role ([3a8fc03](https://github.com/J0hnG4lt/metabase-flightsql-driver/commit/3a8fc0362b76452e077d32777f204dcecbe2983e))
+
 ## [0.7.0](https://github.com/J0hnG4lt/metabase-flightsql-driver/compare/0.6.1...0.7.0) (2026-10-20)
 
 
