@@ -269,8 +269,8 @@
         ;; NOTE: We intentionally do NOT include catalog in the JDBC URL.
         ;; The Arrow Flight SQL JDBC driver calls SetSessionOptions when catalog is specified,
         ;; but many Flight SQL servers (e.g., GizmoSQL/DuckDB) don't implement this RPC.
-        ;; Instead, we use the catalog value only for filtering during schema sync
-        ;; (see describe-database and describe-fields-sql methods).
+        ;; Instead, use the catalog for metadata filters and qualify physical
+        ;; table references in SQL (see the :metadata/table compiler below).
         params    (cond-> (vec (auth-query-params driver details))
                     true (conj (str "useEncryption=" (boolean useEncryption)))
                     true (conj (str "disableCertificateVerification=" (boolean disableCertificateVerification)))
@@ -366,6 +366,18 @@
   (fn [] (some-> (.getTime rs i) .toLocalTime)))
 
 ;; ----------------------------------------------------------------
+;; The connection's catalog scopes metadata but does not change the server's
+;; current database. Qualify physical tables so MBQL also works on attached
+;; catalogs. Leave field/alias resolution to Metabase, and preserve an explicit
+;; :db supplied by a cross-database rewriter.
+(defmethod sql.qp/->honeysql [:arrow-flight-sql :metadata/table]
+  [driver {:keys [name schema db]}]
+  (let [catalog (or (non-blank-str db)
+                    (non-blank-str (get-in (driver-api/database (driver-api/metadata-provider))
+                                           [:details :catalog])))]
+    (sql.qp/->honeysql driver (h2x/identifier :table catalog schema name))))
+
+;; ----------------------------------------------------------------
 ;; Custom Schema Sync Implementations
 ;; ----------------------------------------------------------------
 
@@ -430,15 +442,23 @@
 ;; any Flight SQL server exposing information_schema.
 (defmethod driver/describe-table :arrow-flight-sql
   [driver database {:keys [name schema]}]
-  (let [spec (sql-jdbc.conn/connection-details->spec driver (:details database))
+  (let [catalog (non-blank-str (get-in database [:details :catalog]))
+        spec (sql-jdbc.conn/connection-details->spec driver (:details database))
         conn (jdbc/get-connection spec)]
     (try
       (let [results (jdbc/query {:connection conn}
-                                [(str "SELECT column_name, data_type, is_nullable, ordinal_position"
-                                      " FROM information_schema.columns"
-                                      " WHERE LOWER(table_schema) = LOWER(?) AND LOWER(table_name) = LOWER(?)"
-                                      " ORDER BY ordinal_position")
-                                 schema name]
+                                ;; Like bulk sync, inline escaped literals: some
+                                ;; Flight SQL servers do not bind metadata filters.
+                                (sql/format
+                                 {:select [:column_name :data_type :is_nullable :ordinal_position]
+                                  :from [[:information_schema.columns]]
+                                  :where (cond-> [:and
+                                                  [:= [:lower :table_schema] [:inline (some-> schema str/lower-case)]]
+                                                  [:= [:lower :table_name] [:inline (str/lower-case name)]]]
+                                           catalog (conj [:= [:lower :table_catalog]
+                                                          [:inline (str/lower-case catalog)]]))
+                                  :order-by [:ordinal_position]}
+                                 :dialect (sql.qp/quote-style driver))
                                 {:identifiers str/lower-case})
             fields  (into #{}
                           (map-indexed

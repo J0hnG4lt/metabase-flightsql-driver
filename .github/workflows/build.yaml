@@ -260,7 +260,7 @@ jobs:
         MB_ARROW_FLIGHT_SQL_TEST_USER: gizmosql
         MB_ARROW_FLIGHT_SQL_TEST_PASSWORD: gizmosql_password
       run: |
-        clojure -X:dev:drivers:drivers-dev:test :only '[metabase.driver.arrow-flight-sql-test]'
+        clojure -X:dev:drivers:drivers-dev:test :only '[metabase.driver.arrow-flight-sql-test metabase.driver.arrow-flight-sql-catalog-test]'
 
   # NOTE: release asset attachment lives in release-please.yml, not here.
   # A `release: published` trigger would never fire, because GitHub does not

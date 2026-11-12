@@ -52,6 +52,51 @@ def req(method, path, body=None, timeout=120):
             return e.code, None
 
 
+def check_attached_catalog(details):
+    """Exercise MBQL outside the server's default memory catalog, on 63 and 64."""
+    status, db = req("POST", "/api/database", {
+        "name": "smoke-warehouse", "engine": "arrow-flight-sql",
+        "details": dict(details, catalog="warehouse")})
+    if status != 200 or not isinstance(db, dict) or not db.get("id"):
+        raise RuntimeError(f"Could not create catalog smoke connection: HTTP {status}")
+    db_id = db["id"]
+    try:
+        req("POST", f"/api/database/{db_id}/sync_schema")
+        deadline = time.monotonic() + 120
+        table = None
+        while time.monotonic() < deadline:
+            _, metadata = req("GET", f"/api/database/{db_id}/metadata")
+            table = next((t for t in (metadata or {}).get("tables", [])
+                          if t["schema"] == "archive" and t["name"] == "orders_2023"
+                          and any(f["name"] == "order_id" for f in t.get("fields", []))), None)
+            if table:
+                break
+            time.sleep(3)
+        if not table:
+            raise RuntimeError("warehouse.archive.orders_2023 did not sync")
+        order_id = next(f["id"] for f in table["fields"] if f["name"] == "order_id")
+        source = {"source-table": table["id"], "aggregation": [["count"]]}
+        joined = dict(source, joins=[{
+            "source-table": table["id"], "alias": "Archive", "strategy": "left-join",
+            "condition": ["=", ["field", order_id, None],
+                          ["field", order_id, {"join-alias": "Archive"}]]}])
+        for label, query, references in [("count", source, 1), ("self-join", joined, 2)]:
+            status, result = req("POST", "/api/dataset", {
+                "database": db_id, "type": "query", "query": query})
+            if status not in (200, 202) or not isinstance(result, dict) or result.get("status") != "completed":
+                raise RuntimeError(f"Attached catalog {label} failed: {str(result)[:500]}")
+            if result["data"]["rows"] != [[8]]:
+                raise RuntimeError(f"Attached catalog {label}: unexpected rows {result['data']['rows']}")
+            native = result["data"]["native_form"]["query"]
+            if native.count('"warehouse"."archive"."orders_2023"') != references:
+                raise RuntimeError(f"Attached catalog {label} is not fully qualified: {native}")
+            print(f"OK: attached catalog MBQL {label}, fully qualified, 8 rows")
+    finally:
+        status, _ = req("DELETE", f"/api/database/{db_id}")
+        if status not in (200, 204):
+            raise RuntimeError(f"Could not clean up catalog smoke database {db_id}: HTTP {status}")
+
+
 def main():
     # 1) the plugin must have registered its engine
     _, props = req("GET", "/api/session/properties")
@@ -110,6 +155,7 @@ def main():
             "source-table": orders["id"], "aggregation": [["count"]],
             "filter": ["=", ["field", fields["status"]["id"], None], "Delivered"]}},
               [[6]], "MBQL text filter")
+        check_attached_catalog(details)
         print("OK: driver runtime compatibility checks passed")
     finally:
         status, _ = req("DELETE", f"/api/database/{db_id}")

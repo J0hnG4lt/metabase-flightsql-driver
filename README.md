@@ -286,7 +286,7 @@ When setting up the connection in Metabase, the driver registers under the name 
     - **GizmoSQL external JWT**: set Username to the literal `token`, JWT in Password.
   - *Toggle on*: Bearer token / PAT / API key → sent as `Authorization: Bearer …` (InfluxDB 3 tokens, Dremio PATs, pre-issued JWTs).
   - *Anonymous*: leave all credential fields blank (ROAPI, kamu, Ballista, Spice.ai without auth).
-- **Catalog**: (Optional) - The name of the catalog to use.
+- **Catalog**: (Optional) - Scopes metadata discovery and qualifies physical tables in query-builder SQL as `catalog.schema.table`, including joins and subqueries. Leave blank to retain the server's default context. An explicit table database takes precedence. This does not set the JDBC session catalog, so servers without `SetSessionOptions` support remain usable. Native SQL must specify its own table names.
 - **Advanced**: server CA certificate, mTLS client certificate/key (PEM secrets), connect timeout, and free-form additional JDBC options (`threadPoolSize`, `retainAuth`, `oauth.*` for OAuth 2.0 client-credentials/token-exchange, or any custom parameter — unknown parameters are forwarded to the server as gRPC headers, e.g. `database=<db>` for InfluxDB 3).
 - **Use Encryption**: (Default: true) – Enable or disable TLS. Switch off for local plaintext servers (the docker-compose demo does this explicitly).
 - **Disable Certificate Verification**: (Default: false) – Only enable for servers with self-signed certificates.
